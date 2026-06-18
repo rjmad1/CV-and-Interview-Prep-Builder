@@ -149,6 +149,22 @@ interface CISState {
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api";
 
+// Scoped fetch wrapper to inject NVIDIA NIM headers dynamically from localStorage
+const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const headers = new Headers(init?.headers);
+  if (typeof window !== "undefined") {
+    const key = localStorage.getItem("nvidia_api_key");
+    const mode = localStorage.getItem("gateway_mode");
+    if (key) headers.set("X-NVIDIA-API-Key", key);
+    if (mode) headers.set("X-AI-Gateway-Mode", mode);
+  }
+  const nativeFetch = typeof window !== "undefined" ? window.fetch : globalThis.fetch;
+  return nativeFetch(input, {
+    ...init,
+    headers,
+  });
+};
+
 export const useCISStore = create<CISState>((set, get) => ({
   documents: [],
   jdAnalysis: null,

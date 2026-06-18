@@ -20,7 +20,7 @@ from apps.api.src.models import (
     Application, Interview, Outcome, HallucinationEvent, InterviewSessionState
 )
 import numpy as np
-from apps.api.src.utils.ai_client import ai_gateway_client
+from apps.api.src.utils.ai_client import ai_gateway_client, nvidia_api_key_ctx, ai_gateway_mode_ctx
 
 # Import LangGraph workflows
 from apps.api.src.graph.document_processing import document_processing_graph
@@ -270,6 +270,87 @@ async def get_current_user(
 # ----------------------------------------------------
 # Route API Handlers
 # ----------------------------------------------------
+
+# Middleware to extract client-side NVIDIA settings from headers
+@app.middleware("http")
+async def extract_nvidia_headers(request, call_next):
+    api_key = request.headers.get("x-nvidia-api-key", "")
+    mode = request.headers.get("x-ai-gateway-mode", "")
+    token_api_key = nvidia_api_key_ctx.set(api_key)
+    token_mode = ai_gateway_mode_ctx.set(mode)
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        nvidia_api_key_ctx.reset(token_api_key)
+        ai_gateway_mode_ctx.reset(token_mode)
+
+class SettingsSaveRequest(BaseModel):
+    nvidia_api_key: str | None = None
+    ai_gateway_mode: str | None = None
+
+class SettingsStatusResponse(BaseModel):
+    api_key_configured: bool
+    ai_gateway_mode: str
+
+@app.get("/api/settings/status", response_model=SettingsStatusResponse)
+async def get_settings_status(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    api_key_configured = bool(settings.NVIDIA_API_KEY) and settings.NVIDIA_API_KEY != "mock_nvidia_nim_development_key"
+    return SettingsStatusResponse(
+        api_key_configured=api_key_configured,
+        ai_gateway_mode=settings.AI_GATEWAY_MODE
+    )
+
+@app.post("/api/settings/save")
+async def save_settings(
+    request: SettingsSaveRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    if request.ai_gateway_mode is not None:
+        settings.AI_GATEWAY_MODE = request.ai_gateway_mode
+        os.environ["AI_GATEWAY_MODE"] = request.ai_gateway_mode
+    if request.nvidia_api_key is not None:
+        settings.NVIDIA_API_KEY = request.nvidia_api_key
+        os.environ["NVIDIA_API_KEY"] = request.nvidia_api_key
+
+    # Persist to local ignored .env files
+    env_paths = [
+        "c:/Users/rajaj/Projects/CV and Interview Prep Builder/.env",
+        "c:/Users/rajaj/Projects/CV and Interview Prep Builder/apps/api/.env"
+    ]
+    for path in env_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                new_lines = []
+                seen_key = False
+                seen_mode = False
+                for line in lines:
+                    if line.startswith("NVIDIA_API_KEY="):
+                        seen_key = True
+                        if request.nvidia_api_key is not None:
+                            new_lines.append(f"NVIDIA_API_KEY={request.nvidia_api_key}\n")
+                        else:
+                            new_lines.append(line)
+                    elif line.startswith("AI_GATEWAY_MODE="):
+                        seen_mode = True
+                        if request.ai_gateway_mode is not None:
+                            new_lines.append(f"AI_GATEWAY_MODE={request.ai_gateway_mode}\n")
+                        else:
+                            new_lines.append(line)
+                    else:
+                        new_lines.append(line)
+                if not seen_key and request.nvidia_api_key is not None:
+                    new_lines.append(f"NVIDIA_API_KEY={request.nvidia_api_key}\n")
+                if not seen_mode and request.ai_gateway_mode is not None:
+                    new_lines.append(f"AI_GATEWAY_MODE={request.ai_gateway_mode}\n")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.writelines(new_lines)
+            except Exception as e:
+                logger.error(f"Failed to update {path}: {e}")
+    return {"status": "success", "message": "Settings saved successfully"}
 
 @app.get("/")
 def read_root():

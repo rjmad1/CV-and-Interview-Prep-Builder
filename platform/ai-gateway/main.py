@@ -1,8 +1,12 @@
 import logging
 from typing import List, Dict, Any
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Header
 from pydantic import BaseModel, Field
-from platform.ai_gateway.client import NIMClient
+from contextvars import ContextVar
+
+nvidia_api_key_ctx: ContextVar[str] = ContextVar("nvidia_api_key", default="")
+ai_gateway_mode_ctx: ContextVar[str] = ContextVar("ai_gateway_mode", default="")
+
 from platform.ai_gateway.config import settings
 
 # Setup logging
@@ -15,6 +19,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Middleware to capture incoming headers and set context
+@app.middleware("http")
+async def extract_gateway_headers(request, call_next):
+    api_key = request.headers.get("x-nvidia-api-key", "")
+    mode = request.headers.get("x-ai-gateway-mode", "")
+    token_api_key = nvidia_api_key_ctx.set(api_key)
+    token_mode = ai_gateway_mode_ctx.set(mode)
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        nvidia_api_key_ctx.reset(token_api_key)
+        ai_gateway_mode_ctx.reset(token_mode)
+
+from platform.ai_gateway.client import NIMClient
 nim_client = NIMClient()
 
 @app.on_event("shutdown")
@@ -52,11 +71,13 @@ class ClassifyResponse(BaseModel):
 
 @app.get("/")
 def read_root():
+    api_key = nvidia_api_key_ctx.get() or settings.NVIDIA_API_KEY
+    mode = ai_gateway_mode_ctx.get() or settings.AI_GATEWAY_MODE
     return {
         "status": "healthy",
         "service": "AI Gateway",
-        "mode": settings.AI_GATEWAY_MODE,
-        "api_key_configured": bool(settings.NVIDIA_API_KEY)
+        "mode": mode,
+        "api_key_configured": bool(api_key) and api_key != "mock_nvidia_nim_development_key"
     }
 
 @app.post("/generate", response_model=GenerateResponse)

@@ -8,18 +8,24 @@ logger = logging.getLogger("cis-ai-gateway-client")
 
 class NIMClient:
     def __init__(self):
-        self.headers = {
-            "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
-            "Content-Type": "application/json"
-        }
         self.client = httpx.AsyncClient(timeout=60.0)
 
     async def close(self):
         await self.client.aclose()
 
+    def _get_headers(self, api_key: str) -> Dict[str, str]:
+        return {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
     async def generate(self, model: str, messages: List[Dict[str, str]], temperature: float = 0.2, max_tokens: int = 1024) -> str:
         """Calls Chat Completions API on NVIDIA NIM."""
-        if settings.AI_GATEWAY_MODE == "mock" or not settings.NVIDIA_API_KEY:
+        from ai_gateway.main import nvidia_api_key_ctx, ai_gateway_mode_ctx
+        mode = ai_gateway_mode_ctx.get() or settings.AI_GATEWAY_MODE
+        api_key = nvidia_api_key_ctx.get() or settings.NVIDIA_API_KEY
+
+        if mode == "mock" or not api_key:
             return self._mock_generation(model, messages)
         
         url = f"{settings.NVIDIA_BASE_URL}/chat/completions"
@@ -30,7 +36,7 @@ class NIMClient:
             "max_tokens": max_tokens
         }
         try:
-            response = await self.client.post(url, json=payload, headers=self.headers)
+            response = await self.client.post(url, json=payload, headers=self._get_headers(api_key))
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"]
@@ -40,7 +46,11 @@ class NIMClient:
 
     async def embed(self, texts: List[str]) -> List[List[float]]:
         """Calls Embeddings API on NVIDIA NIM."""
-        if settings.AI_GATEWAY_MODE == "mock" or not settings.NVIDIA_API_KEY:
+        from ai_gateway.main import nvidia_api_key_ctx, ai_gateway_mode_ctx
+        mode = ai_gateway_mode_ctx.get() or settings.AI_GATEWAY_MODE
+        api_key = nvidia_api_key_ctx.get() or settings.NVIDIA_API_KEY
+
+        if mode == "mock" or not api_key:
             # Generate deterministic mock vectors of size 1024
             return [[(i % 100) / 1000.0 for i in range(1024)] for _ in texts]
 
@@ -51,7 +61,7 @@ class NIMClient:
             "encoding_format": "float"
         }
         try:
-            response = await self.client.post(url, json=payload, headers=self.headers)
+            response = await self.client.post(url, json=payload, headers=self._get_headers(api_key))
             response.raise_for_status()
             data = response.json()
             return [item["embedding"] for item in data["data"]]
@@ -61,7 +71,11 @@ class NIMClient:
 
     async def rerank(self, query: str, passages: List[str]) -> List[Dict[str, Any]]:
         """Calls Reranking API on NVIDIA NIM."""
-        if settings.AI_GATEWAY_MODE == "mock" or not settings.NVIDIA_API_KEY:
+        from ai_gateway.main import nvidia_api_key_ctx, ai_gateway_mode_ctx
+        mode = ai_gateway_mode_ctx.get() or settings.AI_GATEWAY_MODE
+        api_key = nvidia_api_key_ctx.get() or settings.NVIDIA_API_KEY
+
+        if mode == "mock" or not api_key:
             # Mock rerank scores based on simple term overlaps
             results = []
             query_words = set(query.lower().split())
@@ -83,7 +97,7 @@ class NIMClient:
             "passages": [{"text": p} for p in passages]
         }
         try:
-            response = await self.client.post(url, json=payload, headers=self.headers)
+            response = await self.client.post(url, json=payload, headers=self._get_headers(api_key))
             response.raise_for_status()
             data = response.json()
             # Parse responses to standard list of items with score and index

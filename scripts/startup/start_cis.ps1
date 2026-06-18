@@ -9,9 +9,11 @@ $StartupDir = "$ProjectDir\scripts\startup"
 $LogFile = "$StartupDir\startup.log"
 $ApiLog = "$StartupDir\api_startup.log"
 $WebLog = "$StartupDir\web_startup.log"
+$GatewayLog = "$StartupDir\gateway_startup.log"
 
 $ApiUrl = "http://127.0.0.1:8000/"
 $WebUrl = "http://127.0.0.1:3000/"
+$GatewayUrl = "http://127.0.0.1:8001/"
 
 $MaxRetries = 30 # 60 seconds total timeout (30 * 2s)
 $RetryInterval = 2
@@ -42,6 +44,7 @@ function Test-PortInUse([int]$Port) {
 
 $ApiAlreadyRunning = Test-PortInUse 8000
 $WebAlreadyRunning = Test-PortInUse 3000
+$GatewayAlreadyRunning = Test-PortInUse 8001
 
 # ----------------------------------------------------
 # Startup API Backend (FastAPI)
@@ -65,6 +68,30 @@ if ($ApiAlreadyRunning) {
         Exit 1
     }
     Log-Message "API Process started in background (PID: $($ApiProcess.Id)). Log: $ApiLog"
+}
+
+# ----------------------------------------------------
+# Startup AI Gateway (uvicorn)
+# ----------------------------------------------------
+if ($GatewayAlreadyRunning) {
+    Log-Message "Port 8001 is already in use. Assuming AI Gateway is running."
+} else {
+    Log-Message "Starting AI Gateway on port 8001..."
+    $ApiVenvPath = "$ProjectDir\apps\api\.venv\Scripts\uvicorn.exe"
+    if (-not (Test-Path $ApiVenvPath)) {
+        Log-Message "Gateway Virtual Environment (using API venv) not found at $ApiVenvPath. Aborting startup." "ERROR"
+        Exit 1
+    }
+    
+    # Run Uvicorn in a background PowerShell process for AI Gateway
+    $GatewayArguments = "-NoProfile -Command `"`$env:PYTHONPATH='$ProjectDir'; & '$ApiVenvPath' ai_gateway.main:app --port 8001 --host 127.0.0.1 *>`'$GatewayLog`'`""
+    $GatewayProcess = Start-Process -FilePath "powershell.exe" -ArgumentList $GatewayArguments -WorkingDirectory $ProjectDir -WindowStyle Minimized -PassThru
+    
+    if ($GatewayProcess -eq $null) {
+        Log-Message "Failed to start AI Gateway process." "ERROR"
+        Exit 1
+    }
+    Log-Message "AI Gateway Process started in background (PID: $($GatewayProcess.Id)). Log: $GatewayLog"
 }
 
 # ----------------------------------------------------
@@ -92,6 +119,7 @@ if ($WebAlreadyRunning) {
 Log-Message "Waiting for services to become responsive..."
 $ApiHealthy = $false
 $WebHealthy = $false
+$GatewayHealthy = $false
 
 for ($i = 1; $i -le $MaxRetries; $i++) {
     # Check API health
@@ -101,6 +129,19 @@ for ($i = 1; $i -le $MaxRetries; $i++) {
             if ($Response -and $Response.StatusCode -eq 200) {
                 $ApiHealthy = $true
                 Log-Message "API backend is healthy and responsive."
+            }
+        } catch {
+            # Not healthy yet
+        }
+    }
+    
+    # Check Gateway health
+    if (-not $GatewayHealthy) {
+        try {
+            $Response = Invoke-WebRequest -Uri $GatewayUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+            if ($Response -and $Response.StatusCode -eq 200) {
+                $GatewayHealthy = $true
+                Log-Message "AI Gateway is healthy and responsive."
             }
         } catch {
             # Not healthy yet
@@ -120,7 +161,7 @@ for ($i = 1; $i -le $MaxRetries; $i++) {
         }
     }
     
-    if ($ApiHealthy -and $WebHealthy) {
+    if ($ApiHealthy -and $WebHealthy -and $GatewayHealthy) {
         break
     }
     
@@ -128,8 +169,8 @@ for ($i = 1; $i -le $MaxRetries; $i++) {
     Start-Sleep -Seconds $RetryInterval
 }
 
-if (-not ($ApiHealthy -and $WebHealthy)) {
-    Log-Message "Startup timed out or one or more services failed to start. API: $ApiHealthy, Web: $WebHealthy" "WARNING"
+if (-not ($ApiHealthy -and $WebHealthy -and $GatewayHealthy)) {
+    Log-Message "Startup timed out or one or more services failed to start. API: $ApiHealthy, Web: $WebHealthy, Gateway: $GatewayHealthy" "WARNING"
 }
 
 # ----------------------------------------------------

@@ -2,6 +2,7 @@ import React, { Suspense } from "react";
 import type { Metadata } from "next";
 import { Inter, Outfit } from "next/font/google";
 import Sidebar from "./Sidebar";
+import OnboardingModal from "./components/OnboardingModal";
 import "./globals.css";
 
 const inter = Inter({
@@ -29,6 +30,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`dark ${inter.variable} ${outfit.variable}`}>
       <body className="bg-m3-surface min-h-screen flex text-slate-100 antialiased selection:bg-m3-primary/30 selection:text-white font-sans">
+        {/* Onboarding Wizard Setup */}
+        <OnboardingModal />
+
         {/* Navigation Sidebar Panel */}
         <Suspense fallback={<div className="w-64 bg-[var(--md-sys-color-surface-container-high)] border-r border-[var(--md-sys-color-outline)]/20 h-screen fixed" />}>
           <Sidebar />
