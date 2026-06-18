@@ -134,12 +134,53 @@ async def validate_against_evidence(state: ResumeState) -> Dict[str, Any]:
         raise ve
     except Exception as e:
         logger.error(f"Semantic validation crashed, fallback check: {e}")
-        # If external numpy/embed fails, perform lexical checks to prevent blocking during offline runs
-        for b in bullets:
-            matched = any(any(word in ev.lower() for word in b.lower().split() if len(word) > 4) for ev in evidence_texts)
-            if not matched:
-                _record_hallucination(state, b, "Blocked. Offline fallback lexical check failed.")
-                raise ValueError(f"Generation blocked: Statement '{b}' lacks verified grounding.")
+        try:
+            # Try loading sentence-transformers locally
+            from sentence_transformers import SentenceTransformer
+            import numpy as np
+            local_model = SentenceTransformer("all-MiniLM-L6-v2")
+            bullet_embeddings = local_model.encode(bullets)
+            evidence_embeddings = local_model.encode(evidence_texts)
+            
+            for idx, bullet_vec in enumerate(bullet_embeddings):
+                max_sim = 0.0
+                for ev_vec in evidence_embeddings:
+                    dot_prod = np.dot(bullet_vec, ev_vec)
+                    norm_b = np.linalg.norm(bullet_vec)
+                    norm_e = np.linalg.norm(ev_vec)
+                    sim = dot_prod / (norm_b * norm_e) if norm_b and norm_e else 0.0
+                    if sim > max_sim:
+                        max_sim = sim
+                if max_sim < 0.8:
+                    _record_hallucination(state, bullets[idx], f"Blocked. Local sentence-transformer fallback check failed ({max_sim:.4f} < 0.8).")
+                    raise ValueError(f"Generation blocked: Statement '{bullets[idx]}' lacks verified grounding.")
+        except ValueError as ve:
+            raise ve
+        except Exception as le:
+            logger.warning(f"Local sentence-transformers check skipped or failed: {le}. Falling back to Jaccard overlap check.")
+            # Define jaccard_similarity locally
+            def jaccard_similarity(text1: str, text2: str) -> float:
+                import re
+                words1 = set(re.findall(r'\b\w+\b', text1.lower()))
+                words2 = set(re.findall(r'\b\w+\b', text2.lower()))
+                stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "with", "by", "of", "from", "up", "about", "into", "over", "after", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "i", "you", "he", "she", "it", "we", "they", "my", "your", "his", "her", "its", "our", "their"}
+                keywords1 = {w for w in words1 if w not in stop_words and len(w) > 2}
+                keywords2 = {w for w in words2 if w not in stop_words and len(w) > 2}
+                if not keywords1 or not keywords2:
+                    return 0.0
+                intersection = keywords1.intersection(keywords2)
+                union = keywords1.union(keywords2)
+                return len(intersection) / len(union)
+
+            for b in bullets:
+                max_lex_sim = 0.0
+                for ev in evidence_texts:
+                    sim = jaccard_similarity(b, ev)
+                    if sim > max_lex_sim:
+                        max_lex_sim = sim
+                if max_lex_sim < 0.5:
+                    _record_hallucination(state, b, f"Blocked. Offline Jaccard fallback check failed ({max_lex_sim:.4f} < 0.5).")
+                    raise ValueError(f"Generation blocked: Statement '{b}' lacks verified grounding.")
 
     return {
         "validation_status": "passed",

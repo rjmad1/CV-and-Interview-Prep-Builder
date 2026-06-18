@@ -1,13 +1,16 @@
 from sqlalchemy import create_engine, text, event
 from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from apps.api.src.config import settings
 
 # Setup SQLAlchemy engine dynamically based on dialect
 is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
+# --- Sync Setup (for LangGraph / Celery) ---
+db_url_sync = settings.DATABASE_URL
 if is_sqlite:
     engine = create_engine(
-        settings.DATABASE_URL,
+        db_url_sync,
         connect_args={"check_same_thread": False}
     )
     
@@ -19,13 +22,35 @@ if is_sqlite:
         cursor.close()
 else:
     engine = create_engine(
-        settings.DATABASE_URL,
+        db_url_sync,
         pool_size=20,
         max_overflow=10,
         pool_pre_ping=True
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# --- Async Setup (for FastAPI router scalability) ---
+db_url_async = settings.DATABASE_URL
+if is_sqlite:
+    if db_url_async == "sqlite://" or db_url_async == "sqlite:///:memory:":
+        db_url_async = "sqlite+aiosqlite:///:memory:"
+    elif db_url_async.startswith("sqlite:///"):
+        db_url_async = db_url_async.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+else:
+    if db_url_async.startswith("postgresql://"):
+        db_url_async = db_url_async.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif db_url_async.startswith("postgres://"):
+        db_url_async = db_url_async.replace("postgres://", "postgresql+asyncpg://", 1)
+
+async_engine = create_async_engine(
+    db_url_async,
+    pool_pre_ping=True,
+    **({} if is_sqlite else {"pool_size": 20, "max_overflow": 10})
+)
+
+AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=async_engine, class_=AsyncSession)
+
 Base = declarative_base()
 
 def set_tenant_context(session, user_id: str):
@@ -36,10 +61,16 @@ def set_tenant_context(session, user_id: str):
             {"user_id": user_id}
         )
 
-def get_db():
-    """FastAPI database dependency provider."""
-    db = SessionLocal()
-    try:
+async def set_tenant_context_async(session: AsyncSession, user_id: str):
+    """Sets the PostgreSQL app.current_user_id context for Row-Level Security (RLS) asynchronously."""
+    dialect = session.bind.dialect.name
+    if dialect == "postgresql":
+        await session.execute(
+            text("SET LOCAL app.current_user_id = :user_id"), 
+            {"user_id": user_id}
+        )
+
+async def get_db():
+    """FastAPI database dependency provider yielding an AsyncSession."""
+    async with AsyncSessionLocal() as db:
         yield db
-    finally:
-        db.close()

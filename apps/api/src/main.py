@@ -4,13 +4,15 @@ import uuid
 from typing import Dict, List, Any
 from fastapi import FastAPI, HTTPException, status, Depends, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-from sqlalchemy import text, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text, func, select
+import jwt
 
 # Import configurations, DB helpers, models
 from apps.api.src.config import settings
-from apps.api.src.database import get_db, set_tenant_context
+from apps.api.src.database import get_db, set_tenant_context_async
 from apps.api.src.models import (
     User, Document, DocumentChunk, JobDescription, SkillRequirement, GapAnalysis,
     GenerationSession, EvidenceBundle, TraceRecord, ResumeTemplate,
@@ -68,6 +70,35 @@ from apps.api.src.database import engine, Base
 from apps.api.src import models  # noqa: F401 — ensures all models are registered with Base
 Base.metadata.create_all(bind=engine)
 logger.info("Database tables verified/created successfully.")
+
+# Async/Sync DB Helpers for Test Compatibility
+async def execute_db(db, query):
+    from sqlalchemy.ext.asyncio import AsyncSession
+    if isinstance(db, AsyncSession):
+        return await execute_db(db, query)
+    return db.execute(query)
+
+async def commit_db(db):
+    from sqlalchemy.ext.asyncio import AsyncSession
+    if isinstance(db, AsyncSession):
+        await commit_db(db)
+    else:
+        db.commit()
+
+async def refresh_db(db, obj):
+    from sqlalchemy.ext.asyncio import AsyncSession
+    if isinstance(db, AsyncSession):
+        await refresh_db(db, obj)
+    else:
+        db.refresh(obj)
+
+async def delete_db(db, obj):
+    from sqlalchemy.ext.asyncio import AsyncSession
+    if isinstance(db, AsyncSession):
+        await delete_db(db, obj)
+    else:
+        db.delete(obj)
+
 
 # ----------------------------------------------------
 # Request and Response Schemas
@@ -157,41 +188,82 @@ class InterviewReportResponse(BaseModel):
 # Authentication and Tenant Isolation Context
 # ----------------------------------------------------
 
-def get_current_user(db: Session = Depends(get_db)) -> User:
+security = HTTPBearer(auto_error=False)
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db)
+) -> User:
     """
     Retrieves the current authenticated user context.
-    Automatically provisions a default 'developer' tenant if no JWT token is supplied.
+    Decodes the JWT token from the Authorization header.
+    In local development, falls back to the default developer user if no header is present.
     Enforces Row-Level Security (RLS) by executing SET LOCAL app.current_user_id.
     """
-    # Simple developer bypass for ease-of-use
-    dev_email = "developer@career-intelligence.studio"
-    user = db.query(User).filter(User.email == dev_email).first()
+    # 1. Check if token is present
+    if not credentials:
+        if settings.ENV != "production":
+            # Developer bypass for local development/testing only
+            dev_email = "developer@career-intelligence.studio"
+            result = await execute_db(db, select(User).filter(User.email == dev_email))
+            user = result.scalars().first()
+            if not user:
+                user = User(
+                    id=uuid.uuid4(),
+                    email=dev_email,
+                    hashed_password="pbkdf2:sha256:mock_hash_for_dev",
+                    first_name="Lead",
+                    last_name="Architect",
+                    role="admin"
+                )
+                db.add(user)
+                await commit_db(db)
+                await refresh_db(db, user)
+                
+                # Also create a default template for this user
+                template = ResumeTemplate(
+                    id=uuid.uuid4(),
+                    user_id=user.id,
+                    name="Professional Default Template",
+                    file_path="c:/Users/rajaj/Projects/CV and Interview Prep Builder/specs/templates/default_resume.docx",
+                    is_active=True
+                )
+                db.add(template)
+                await commit_db(db)
+                
+            await set_tenant_context_async(db, str(user.id))
+            return user
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials: Authorization header missing."
+            )
+            
+    token = credentials.credentials
+    try:
+        # Decode token
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        email = payload.get("email")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials: Email not found in token claims."
+            )
+    except jwt.PyJWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Could not validate credentials: {str(e)}"
+        )
+        
+    result = await execute_db(db, select(User).filter(User.email == email))
+    user = result.scalars().first()
     if not user:
-        user = User(
-            id=uuid.uuid4(),
-            email=dev_email,
-            hashed_password="pbkdf2:sha256:mock_hash_for_dev",
-            first_name="Lead",
-            last_name="Architect",
-            role="admin"
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials: User not found in database."
         )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
         
-        # Also create a default template for this user
-        template = ResumeTemplate(
-            id=uuid.uuid4(),
-            user_id=user.id,
-            name="Professional Default Template",
-            file_path="c:/Users/rajaj/Projects/CV and Interview Prep Builder/specs/templates/default_resume.docx",
-            is_active=True
-        )
-        db.add(template)
-        db.commit()
-        
-    # Inject user ID context into PostgreSQL for Row-Level Security
-    set_tenant_context(db, str(user.id))
+    await set_tenant_context_async(db, str(user.id))
     return user
 
 # ----------------------------------------------------
@@ -207,7 +279,7 @@ def read_root():
 @app.post("/api/documents/scan", response_model=DocumentScanResponse, status_code=status.HTTP_202_ACCEPTED)
 async def scan_document(
     file: UploadFile = File(...), 
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Scans and initiates background document ingestion parsing and vector indexing."""
@@ -235,7 +307,7 @@ async def scan_document(
         meta_data={"status": "processing"}
     )
     db.add(doc)
-    db.commit()
+    await commit_db(db)
     
     # Launch Celery worker pipeline or process synchronously for local dev
     use_celery = os.getenv("CELERY_WORKER_RUNNING", "false").lower() == "true"
@@ -269,11 +341,12 @@ async def scan_document(
 
 @app.get("/api/documents", response_model=List[DocumentResponse])
 async def list_documents(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Lists all parsed documents in the tenant's Career Archive."""
-    docs = db.query(Document).filter(Document.user_id == user.id).all()
+    result = await execute_db(db, select(Document).filter(Document.user_id == user.id))
+    docs = result.scalars().all()
     return [
         DocumentResponse(
             id=d.id,
@@ -287,11 +360,12 @@ async def list_documents(
 @app.get("/api/documents/{id}", response_model=DocumentResponse)
 async def get_document(
     id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Retrieves metadata and parsed contents of a specific document."""
-    doc = db.query(Document).filter(Document.id == id, Document.user_id == user.id).first()
+    result = await execute_db(db, select(Document).filter(Document.id == id, Document.user_id == user.id))
+    doc = result.scalars().first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return DocumentResponse(
@@ -307,7 +381,7 @@ async def get_document(
 @app.post("/api/jd/analyze", response_model=JDAnalysisResponse)
 async def analyze_jd(
     request: JDAnalysisRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Synchronously analyzes JD requirements and maps user skill gaps."""
@@ -348,16 +422,19 @@ async def analyze_jd(
 @app.get("/api/jd/{id}", response_model=JDAnalysisResponse)
 async def get_jd_analysis(
     id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Retrieves structural analysis and keywords of a specific Job Description."""
-    jd = db.query(JobDescription).filter(JobDescription.id == id, JobDescription.user_id == user.id).first()
+    result_jd = await execute_db(db, select(JobDescription).filter(JobDescription.id == id, JobDescription.user_id == user.id))
+    jd = result_jd.scalars().first()
     if not jd:
         raise HTTPException(status_code=404, detail="Job description not found")
         
-    reqs = db.query(SkillRequirement).filter(SkillRequirement.jd_id == id).all()
-    gaps = db.query(GapAnalysis).filter(GapAnalysis.jd_id == id, GapAnalysis.user_id == user.id).all()
+    result_reqs = await execute_db(db, select(SkillRequirement).filter(SkillRequirement.jd_id == id))
+    reqs = result_reqs.scalars().all()
+    result_gaps = await execute_db(db, select(GapAnalysis).filter(GapAnalysis.jd_id == id, GapAnalysis.user_id == user.id))
+    gaps = result_gaps.scalars().all()
     
     return JDAnalysisResponse(
         jd_id=jd.id,
@@ -375,15 +452,17 @@ async def get_jd_analysis(
 @app.get("/api/evidence/retrieve", response_model=List[EvidenceItem])
 async def retrieve_evidence(
     jd_id: uuid.UUID = Query(..., description="The UUID of analyzed Job Description"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Retrieves relevant evidence chunks matching a job description using hybrid retrieval."""
-    jd = db.query(JobDescription).filter(JobDescription.id == jd_id, JobDescription.user_id == user.id).first()
+    result_jd = await execute_db(db, select(JobDescription).filter(JobDescription.id == jd_id, JobDescription.user_id == user.id))
+    jd = result_jd.scalars().first()
     if not jd:
         raise HTTPException(status_code=404, detail="Job description not found")
         
-    reqs = db.query(SkillRequirement).filter(SkillRequirement.jd_id == jd.id).all()
+    result_reqs = await execute_db(db, select(SkillRequirement).filter(SkillRequirement.jd_id == jd.id))
+    reqs = result_reqs.scalars().all()
     req_names = [r.skill_name for r in reqs] if reqs else ["Python", "FastAPI"]
     
     session_id = uuid.uuid4()
@@ -395,7 +474,7 @@ async def retrieve_evidence(
         session_type="evidence_retrieval"
     )
     db.add(sess)
-    db.commit()
+    await commit_db(db)
     
     retrieval_state = {
         "user_id": str(user.id),
@@ -429,22 +508,27 @@ async def retrieve_evidence(
 
 # --- Resumes Router ---
 
+# --- Resumes Router ---
+
 @app.post("/api/resume/generate", response_model=ResumeResponse)
 async def generate_resume(
     request: ResumeGenerateRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Generates an optimized resume grounded in evidence records."""
     # 1. Fetch template, JD, and documents
-    template = db.query(ResumeTemplate).filter(ResumeTemplate.id == request.template_id).first()
-    jd = db.query(JobDescription).filter(JobDescription.id == request.jd_id).first()
+    result_temp = await execute_db(db, select(ResumeTemplate).filter(ResumeTemplate.id == request.template_id))
+    template = result_temp.scalars().first()
+    result_jd = await execute_db(db, select(JobDescription).filter(JobDescription.id == request.jd_id))
+    jd = result_jd.scalars().first()
     
     if not template or not jd:
         raise HTTPException(status_code=404, detail="Template or Job Description not found")
 
     # Fetch document text as base
-    doc = db.query(Document).filter(Document.user_id == user.id, Document.document_type == "resume").first()
+    result_doc = await execute_db(db, select(Document).filter(Document.user_id == user.id, Document.document_type == "resume"))
+    doc = result_doc.scalars().first()
     original_text = doc.parsed_text if doc else "Senior Developer Python backend."
     
     # 2. Build Evidence Bundle
@@ -457,14 +541,15 @@ async def generate_resume(
         session_type="resume_optimization"
     )
     db.add(sess)
-    db.commit()
+    await commit_db(db)
     
     if request.selected_evidence_ids:
         # Fetch the selected chunks from the database
-        chunks = db.query(DocumentChunk).filter(
+        result_chunks = await execute_db(db, select(DocumentChunk).filter(
             DocumentChunk.id.in_(request.selected_evidence_ids),
             DocumentChunk.user_id == user.id
-        ).all()
+        ))
+        chunks = result_chunks.scalars().all()
         
         # Save an evidence bundle in the database for tracking
         bundle_id = uuid.uuid4()
@@ -475,7 +560,7 @@ async def generate_resume(
             name=f"Selected Evidence Bundle - Session {str(session_id)[:8]}"
         )
         db.add(ev_bundle)
-        db.commit()
+        await commit_db(db)
         
         bundle_items = []
         for rank, chunk in enumerate(chunks):
@@ -494,14 +579,15 @@ async def generate_resume(
                 "confidence": 0.95,
                 "text_snippet": chunk.chunk_text
             })
-        db.commit()
+        await commit_db(db)
         bundle = {
             "bundle_id": str(bundle_id),
             "items": bundle_items
         }
     else:
         # For evidence retrieval, query the JD requirements
-        reqs = db.query(SkillRequirement).filter(SkillRequirement.jd_id == jd.id).all()
+        result_reqs = await execute_db(db, select(SkillRequirement).filter(SkillRequirement.jd_id == jd.id))
+        reqs = result_reqs.scalars().all()
         req_names = [r.skill_name for r in reqs] if reqs else ["Python", "FastAPI"]
         
         retrieval_state = {
@@ -547,11 +633,13 @@ async def generate_resume(
         )
         
     # Fetch generated resume ID
-    db.refresh(user)
-    latest_version = db.query(ResumeVersion).filter(
-        ResumeVersion.user_id == user.id,
-        ResumeVersion.template_id == template.id
-    ).order_by(ResumeVersion.version_number.desc()).first()
+    # Since we are in async, we can query the latest version in database
+    result_latest = await execute_db(db, 
+        select(ResumeVersion)
+        .filter(ResumeVersion.user_id == user.id, ResumeVersion.template_id == template.id)
+        .order_by(ResumeVersion.version_number.desc())
+    )
+    latest_version = result_latest.scalars().first()
     
     resume_id = latest_version.id if latest_version else uuid.uuid4()
     
@@ -573,20 +661,23 @@ async def generate_resume(
 @app.get("/api/resume/{id}", response_model=ResumeResponse)
 async def get_resume(
     id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Retrieves the details of a specific generated resume version."""
-    rv = db.query(ResumeVersion).filter(ResumeVersion.id == id, ResumeVersion.user_id == user.id).first()
+    result_rv = await execute_db(db, select(ResumeVersion).filter(ResumeVersion.id == id, ResumeVersion.user_id == user.id))
+    rv = result_rv.scalars().first()
     if not rv:
         raise HTTPException(status_code=404, detail="Resume version not found")
         
     # Fetch evidence bundle
     evidence_items = []
     if rv.evidence_bundle_id:
-        traces = db.query(TraceRecord).filter(TraceRecord.bundle_id == rv.evidence_bundle_id).all()
+        result_traces = await execute_db(db, select(TraceRecord).filter(TraceRecord.bundle_id == rv.evidence_bundle_id))
+        traces = result_traces.scalars().all()
         for t in traces:
-            chunk = db.query(DocumentChunk).filter(DocumentChunk.id == t.chunk_id).first()
+            result_chunk = await execute_db(db, select(DocumentChunk).filter(DocumentChunk.id == t.chunk_id))
+            chunk = result_chunk.scalars().first()
             if chunk:
                 evidence_items.append(
                     EvidenceItem(
@@ -606,11 +697,12 @@ async def get_resume(
 @app.get("/api/resume/{id}/diff", response_model=ResumeDiffResponse)
 async def get_resume_diff(
     id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Generates line-by-line diff between current and previous resume versions."""
-    diff = db.query(ResumeDiff).filter(ResumeDiff.resume_version_id == id, ResumeDiff.user_id == user.id).first()
+    result_diff = await execute_db(db, select(ResumeDiff).filter(ResumeDiff.resume_version_id == id, ResumeDiff.user_id == user.id))
+    diff = result_diff.scalars().first()
     if not diff:
         raise HTTPException(status_code=404, detail="Diff patch not found for this version")
     return ResumeDiffResponse(
@@ -623,22 +715,25 @@ async def get_resume_diff(
 @app.get("/api/ats/{id}", response_model=ATSReportResponse)
 async def get_ats_report(
     id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Calculates ATS scores and details match metrics."""
     # Fetch resume version
-    rv = db.query(ResumeVersion).filter(ResumeVersion.id == id, ResumeVersion.user_id == user.id).first()
+    result_rv = await execute_db(db, select(ResumeVersion).filter(ResumeVersion.id == id, ResumeVersion.user_id == user.id))
+    rv = result_rv.scalars().first()
     if not rv:
         raise HTTPException(status_code=404, detail="Resume version not found")
         
     # Fetch target JobDescription
-    jd = db.query(JobDescription).filter(JobDescription.id == rv.jd_id).first()
+    result_jd = await execute_db(db, select(JobDescription).filter(JobDescription.id == rv.jd_id))
+    jd = result_jd.scalars().first()
     if not jd:
         raise HTTPException(status_code=404, detail="Associated Job Description not found")
         
     # Fetch JD SkillRequirements
-    reqs = db.query(SkillRequirement).filter(SkillRequirement.jd_id == jd.id).all()
+    result_reqs = await execute_db(db, select(SkillRequirement).filter(SkillRequirement.jd_id == jd.id))
+    reqs = result_reqs.scalars().all()
     keywords = [r.skill_name for r in reqs] if reqs else ["Python", "FastAPI"]
     
     # Compute Score
@@ -660,7 +755,7 @@ async def get_ats_report(
         readability_score=report_data["readability_score"]
     )
     db.add(report)
-    db.commit()
+    await commit_db(db)
     
     # Save keyword analysis items
     findings = report_data["detailed_findings"]
@@ -683,7 +778,7 @@ async def get_ats_report(
             frequency=0,
             recommendation=f"Add evidence demonstrating skills in {kw}."
         ))
-    db.commit()
+    await commit_db(db)
     
     return ATSReportResponse(
         ats_score=report_data["ats_score"],
@@ -701,15 +796,17 @@ interview_sessions = {}
 @app.post("/api/interview/start", response_model=InterviewSessionResponse)
 async def start_interview(
     request: InterviewStartRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Starts a mock interview session grounded in resume and job description."""
     session_id = uuid.uuid4()
     
     # Fetch details
-    rv = db.query(ResumeVersion).filter(ResumeVersion.id == request.resume_id).first()
-    jd = db.query(JobDescription).filter(JobDescription.id == request.jd_id).first()
+    result_rv = await execute_db(db, select(ResumeVersion).filter(ResumeVersion.id == request.resume_id))
+    rv = result_rv.scalars().first()
+    result_jd = await execute_db(db, select(JobDescription).filter(JobDescription.id == request.jd_id))
+    jd = result_jd.scalars().first()
     
     if not rv or not jd:
         raise HTTPException(status_code=404, detail="Resume version or Job description not found")
@@ -717,9 +814,11 @@ async def start_interview(
     # Fetch evidence bundle
     evidence_items = []
     if rv.evidence_bundle_id:
-        traces = db.query(TraceRecord).filter(TraceRecord.bundle_id == rv.evidence_bundle_id).all()
+        result_traces = await execute_db(db, select(TraceRecord).filter(TraceRecord.bundle_id == rv.evidence_bundle_id))
+        traces = result_traces.scalars().all()
         for t in traces:
-            chunk = db.query(DocumentChunk).filter(DocumentChunk.id == t.chunk_id).first()
+            result_chunk = await execute_db(db, select(DocumentChunk).filter(DocumentChunk.id == t.chunk_id))
+            chunk = result_chunk.scalars().first()
             if chunk:
                 evidence_items.append({"chunk_id": str(t.chunk_id), "text_snippet": chunk.chunk_text})
                 
@@ -748,7 +847,7 @@ async def start_interview(
         session_type="interview_prep"
     )
     db.add(sess)
-    db.commit()
+    await commit_db(db)
     
     first_q = res.get("generated_questions", [{"text": "Tell me about yourself"}])[0]["text"]
     
@@ -761,7 +860,7 @@ async def start_interview(
 @app.post("/api/interview/respond", response_model=InterviewFeedbackResponse)
 async def respond_to_question(
     request: InterviewRespondRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Records user response and returns inline coaching tips and the next question."""
@@ -807,10 +906,27 @@ async def respond_to_question(
         completed=completed
     )
 
+def jaccard_similarity(text1: str, text2: str) -> float:
+    import re
+    words1 = set(re.findall(r'\b\w+\b', text1.lower()))
+    words2 = set(re.findall(r'\b\w+\b', text2.lower()))
+    
+    stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "with", "by", "of", "from", "up", "about", "into", "over", "after", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "i", "you", "he", "she", "it", "we", "they", "my", "your", "his", "her", "its", "our", "their"}
+    
+    keywords1 = {w for w in words1 if w not in stop_words and len(w) > 2}
+    keywords2 = {w for w in words2 if w not in stop_words and len(w) > 2}
+    
+    if not keywords1 or not keywords2:
+        return 0.0
+        
+    intersection = keywords1.intersection(keywords2)
+    union = keywords1.union(keywords2)
+    return len(intersection) / len(union)
+
 @app.get("/api/interview/report", response_model=InterviewReportResponse)
 async def get_interview_report(
     session_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Generates final interview readiness feedback, key strengths, and areas of improvement."""
@@ -871,11 +987,12 @@ class OverrideClaimRequest(BaseModel):
 
 @app.get("/api/evidence/hallucinations", response_model=List[HallucinationEventResponse])
 async def list_hallucinations(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Lists all logged validation failures / hallucination blocks for the user."""
-    events = db.query(HallucinationEvent).filter(HallucinationEvent.user_id == user.id).order_by(HallucinationEvent.created_at.desc()).all()
+    result_events = await execute_db(db, select(HallucinationEvent).filter(HallucinationEvent.user_id == user.id).order_by(HallucinationEvent.created_at.desc()))
+    events = result_events.scalars().all()
     return [
         HallucinationEventResponse(
             id=ev.id,
@@ -890,17 +1007,18 @@ async def list_hallucinations(
 @app.post("/api/evidence/verify", response_model=VerifyClaimResponse)
 async def verify_claim(
     request: VerifyClaimRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Calculates cosine similarity between a claim and selected evidence chunks to verify grounding."""
     if not request.selected_evidence_ids:
         raise HTTPException(status_code=400, detail="Must select at least one evidence chunk for validation.")
         
-    chunks = db.query(DocumentChunk).filter(
+    result_chunks = await execute_db(db, select(DocumentChunk).filter(
         DocumentChunk.id.in_(request.selected_evidence_ids),
         DocumentChunk.user_id == user.id
-    ).all()
+    ))
+    chunks = result_chunks.scalars().all()
     
     if not chunks:
         raise HTTPException(status_code=404, detail="Selected evidence chunks not found.")
@@ -935,14 +1053,11 @@ async def verify_claim(
         )
     except Exception as e:
         logger.error(f"Manual claim verification failed: {e}")
-        # Lexical fallback
+        # Lexical Jaccard fallback
         max_sim = 0.0
         matched_chunk = None
         for chunk in chunks:
-            words_snippet = set([w.lower() for w in request.text_snippet.split() if len(w) > 4])
-            words_chunk = set([w.lower() for w in chunk.chunk_text.split()])
-            overlap = len(words_snippet.intersection(words_chunk))
-            sim = overlap / len(words_snippet) if words_snippet else 0.0
+            sim = jaccard_similarity(request.text_snippet, chunk.chunk_text)
             if sim > max_sim:
                 max_sim = sim
                 matched_chunk = chunk
@@ -957,21 +1072,24 @@ async def verify_claim(
 @app.post("/api/evidence/override")
 async def override_hallucination(
     request: OverrideClaimRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Allows user to override a hallucination block by adding audit justifications."""
-    event = db.query(HallucinationEvent).filter(
-        HallucinationEvent.id == request.event_id,
-        HallucinationEvent.user_id == user.id
-    ).first()
+    result_event = await execute_db(db, 
+        select(HallucinationEvent).filter(
+            HallucinationEvent.id == request.event_id,
+            HallucinationEvent.user_id == user.id
+        )
+    )
+    event = result_event.scalars().first()
     
     if not event:
         raise HTTPException(status_code=404, detail="Hallucination event record not found.")
         
     event.validation_status = "overridden"
     event.audit_comments = f"User Override: {request.audit_comments}"
-    db.commit()
+    await commit_db(db)
     return {"status": "success", "message": "Hallucination block overridden successfully."}
 
 class ATSOptimizeRequest(BaseModel):
@@ -990,96 +1108,104 @@ class ATSOptimizeResponse(BaseModel):
 @app.post("/api/ats/optimize", response_model=ATSOptimizeResponse)
 async def optimize_resume_ats(
     request: ATSOptimizeRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Iteratively rewrites resume content to weave in missing keywords and optimize ATS match score."""
     from apps.api.src.engine.ats_optimizer import ATSOptimizer
+    from apps.api.src.database import SessionLocal
     import difflib
     
-    # Fetch original version
-    prev_version = db.query(ResumeVersion).filter(
-        ResumeVersion.id == request.resume_version_id,
-        ResumeVersion.user_id == user.id
-    ).first()
-    
-    if not prev_version:
-        raise HTTPException(status_code=404, detail="Original resume version not found.")
-        
-    optimizer = ATSOptimizer(db)
+    from sqlalchemy.ext.asyncio import AsyncSession
+    is_async = isinstance(db, AsyncSession)
+    sync_db = SessionLocal() if is_async else db
     try:
-        res = await optimizer.optimize_resume(
-            resume_version_id=request.resume_version_id,
-            jd_id=request.jd_id,
-            user_id=user.id
-        )
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        # Fetch original version
+        prev_version = sync_db.query(ResumeVersion).filter(
+            ResumeVersion.id == request.resume_version_id,
+            ResumeVersion.user_id == user.id
+        ).first()
         
-    # Create new ResumeVersion
-    latest_count = db.query(ResumeVersion).filter(
-        ResumeVersion.user_id == user.id,
-        ResumeVersion.template_id == prev_version.template_id
-    ).count()
-    
-    # Create new output DOCX using Template Preserving CV Engine
-    out_dir = "c:/Users/rajaj/Projects/CV and Interview Prep Builder/data/resumes"
-    os.makedirs(out_dir, exist_ok=True)
-    out_filename = f"optimized_resume_ats_{uuid.uuid4().hex[:8]}.docx"
-    output_path = os.path.join(out_dir, out_filename)
-    
-    from apps.api.src.engine.docx_engine import DocxEngine
-    docx_engine = DocxEngine()
-    docx_engine.merge_changes(
-        template_path=prev_version.file_path,
-        optimized_sections={"Professional Experience": res["optimized_text"]},
-        output_path=output_path
-    )
-    
-    new_version = ResumeVersion(
-        id=uuid.uuid4(),
-        user_id=user.id,
-        template_id=prev_version.template_id,
-        version_number=latest_count + 1,
-        jd_id=request.jd_id,
-        generated_text=res["optimized_text"],
-        file_path=output_path,
-        evidence_bundle_id=prev_version.evidence_bundle_id
-    )
-    db.add(new_version)
-    db.commit()
-    
-    # Generate diff
-    original_lines = prev_version.generated_text.splitlines()
-    optimized_lines = res["optimized_text"].splitlines()
-    diff = difflib.unified_diff(
-        original_lines,
-        optimized_lines,
-        fromfile=f"v{prev_version.version_number}",
-        tofile=f"v{new_version.version_number}",
-        lineterm=""
-    )
-    diff_text = "\n".join(diff)
-    
-    res_diff = ResumeDiff(
-        id=uuid.uuid4(),
-        resume_version_id=new_version.id,
-        user_id=user.id,
-        diff_patch=diff_text,
-        modified_sections=["Professional Experience"]
-    )
-    db.add(res_diff)
-    db.commit()
-    
-    return ATSOptimizeResponse(
-        success=res["success"],
-        optimized_resume_id=new_version.id,
-        version=new_version.version_number,
-        initial_score=res["initial_score"],
-        new_score=res["new_score"],
-        weaved_keywords=res["weaved_keywords"],
-        message=res["message"]
-    )
+        if not prev_version:
+            raise HTTPException(status_code=404, detail="Original resume version not found.")
+            
+        optimizer = ATSOptimizer(sync_db)
+        try:
+            res = await optimizer.optimize_resume(
+                resume_version_id=request.resume_version_id,
+                jd_id=request.jd_id,
+                user_id=user.id
+            )
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
+            
+        # Create new ResumeVersion
+        latest_count = sync_db.query(ResumeVersion).filter(
+            ResumeVersion.user_id == user.id,
+            ResumeVersion.template_id == prev_version.template_id
+        ).count()
+        
+        # Create new output DOCX using Template Preserving CV Engine
+        out_dir = "c:/Users/rajaj/Projects/CV and Interview Prep Builder/data/resumes"
+        os.makedirs(out_dir, exist_ok=True)
+        out_filename = f"optimized_resume_ats_{uuid.uuid4().hex[:8]}.docx"
+        output_path = os.path.join(out_dir, out_filename)
+        
+        from apps.api.src.engine.docx_engine import DocxEngine
+        docx_engine = DocxEngine()
+        docx_engine.merge_changes(
+            template_path=prev_version.file_path,
+            optimized_sections={"Professional Experience": res["optimized_text"]},
+            output_path=output_path
+        )
+        
+        new_version = ResumeVersion(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            template_id=prev_version.template_id,
+            version_number=latest_count + 1,
+            jd_id=request.jd_id,
+            generated_text=res["optimized_text"],
+            file_path=output_path,
+            evidence_bundle_id=prev_version.evidence_bundle_id
+        )
+        sync_db.add(new_version)
+        sync_db.commit()
+        
+        # Generate diff
+        original_lines = prev_version.generated_text.splitlines()
+        optimized_lines = res["optimized_text"].splitlines()
+        diff = difflib.unified_diff(
+            original_lines,
+            optimized_lines,
+            fromfile=f"v{prev_version.version_number}",
+            tofile=f"v{new_version.version_number}",
+            lineterm=""
+        )
+        diff_text = "\n".join(diff)
+        
+        res_diff = ResumeDiff(
+            id=uuid.uuid4(),
+            resume_version_id=new_version.id,
+            user_id=user.id,
+            diff_patch=diff_text,
+            modified_sections=["Professional Experience"]
+        )
+        sync_db.add(res_diff)
+        sync_db.commit()
+        
+        return ATSOptimizeResponse(
+            success=res["success"],
+            optimized_resume_id=new_version.id,
+            version=new_version.version_number,
+            initial_score=res["initial_score"],
+            new_score=res["new_score"],
+            weaved_keywords=res["weaved_keywords"],
+            message=res["message"]
+        )
+    finally:
+        if is_async:
+            sync_db.close()
 
 # --- Application Tracking Schemas & Router ---
 
@@ -1122,13 +1248,16 @@ class InterviewResponse(BaseModel):
 
 @app.get("/api/applications", response_model=List[ApplicationResponse])
 async def list_applications(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Lists all job applications for the user, with job details."""
-    results = db.query(Application, JobDescription).join(
-        JobDescription, Application.jd_id == JobDescription.id
-    ).filter(Application.user_id == user.id).all()
+    result = await execute_db(db, 
+        select(Application, JobDescription)
+        .join(JobDescription, Application.jd_id == JobDescription.id)
+        .filter(Application.user_id == user.id)
+    )
+    results = result.all()
     
     return [
         ApplicationResponse(
@@ -1146,15 +1275,17 @@ async def list_applications(
 @app.post("/api/applications", response_model=ApplicationResponse)
 async def create_application(
     request: ApplicationCreateRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Creates a new job application tracking entry."""
-    jd = db.query(JobDescription).filter(JobDescription.id == request.jd_id, JobDescription.user_id == user.id).first()
+    result_jd = await execute_db(db, select(JobDescription).filter(JobDescription.id == request.jd_id, JobDescription.user_id == user.id))
+    jd = result_jd.scalars().first()
     if not jd:
         raise HTTPException(status_code=404, detail="Job description not found.")
         
-    rv = db.query(ResumeVersion).filter(ResumeVersion.id == request.resume_version_id, ResumeVersion.user_id == user.id).first()
+    result_rv = await execute_db(db, select(ResumeVersion).filter(ResumeVersion.id == request.resume_version_id, ResumeVersion.user_id == user.id))
+    rv = result_rv.scalars().first()
     if not rv:
         raise HTTPException(status_code=404, detail="Resume version not found.")
         
@@ -1167,7 +1298,7 @@ async def create_application(
         notes=request.notes
     )
     db.add(app_rec)
-    db.commit()
+    await commit_db(db)
     
     return ApplicationResponse(
         id=app_rec.id,
@@ -1184,20 +1315,22 @@ async def create_application(
 async def update_application(
     id: uuid.UUID,
     request: ApplicationUpdateRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Updates application status or notes."""
-    app_rec = db.query(Application).filter(Application.id == id, Application.user_id == user.id).first()
+    result_app = await execute_db(db, select(Application).filter(Application.id == id, Application.user_id == user.id))
+    app_rec = result_app.scalars().first()
     if not app_rec:
         raise HTTPException(status_code=404, detail="Application not found.")
         
     app_rec.status = request.status
     if request.notes is not None:
         app_rec.notes = request.notes
-    db.commit()
+    await commit_db(db)
     
-    jd = db.query(JobDescription).filter(JobDescription.id == app_rec.jd_id).first()
+    result_jd = await execute_db(db, select(JobDescription).filter(JobDescription.id == app_rec.jd_id))
+    jd = result_jd.scalars().first()
     return ApplicationResponse(
         id=app_rec.id,
         jd_id=app_rec.jd_id,
@@ -1212,26 +1345,28 @@ async def update_application(
 @app.delete("/api/applications/{id}")
 async def delete_application(
     id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Deletes a job application entry."""
-    app_rec = db.query(Application).filter(Application.id == id, Application.user_id == user.id).first()
+    result_app = await execute_db(db, select(Application).filter(Application.id == id, Application.user_id == user.id))
+    app_rec = result_app.scalars().first()
     if not app_rec:
         raise HTTPException(status_code=404, detail="Application not found.")
         
-    db.delete(app_rec)
-    db.commit()
+    await delete_db(db, app_rec)
+    await commit_db(db)
     return {"status": "success", "message": "Application deleted successfully."}
 
 @app.get("/api/applications/{id}/interviews", response_model=List[InterviewResponse])
 async def list_interviews(
     id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Lists all scheduled interview rounds for an application."""
-    interviews = db.query(Interview).filter(Interview.application_id == id, Interview.user_id == user.id).all()
+    result_ints = await execute_db(db, select(Interview).filter(Interview.application_id == id, Interview.user_id == user.id))
+    interviews = result_ints.scalars().all()
     return [
         InterviewResponse(
             id=i.id,
@@ -1247,13 +1382,14 @@ async def list_interviews(
 async def create_interview(
     id: uuid.UUID,
     request: InterviewCreateRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Schedules a new interview round and transitions application status to 'interviewing'."""
     from datetime import datetime
     
-    app_rec = db.query(Application).filter(Application.id == id, Application.user_id == user.id).first()
+    result_app = await execute_db(db, select(Application).filter(Application.id == id, Application.user_id == user.id))
+    app_rec = result_app.scalars().first()
     if not app_rec:
         raise HTTPException(status_code=404, detail="Application not found.")
         
@@ -1275,7 +1411,7 @@ async def create_interview(
     
     # Transition application status to interviewing
     app_rec.status = "interviewing"
-    db.commit()
+    await commit_db(db)
     
     return InterviewResponse(
         id=interview.id,
@@ -1290,11 +1426,12 @@ async def create_interview(
 async def log_outcome(
     id: uuid.UUID,
     request: OutcomeCreateRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Logs the final application outcome and updates status."""
-    app_rec = db.query(Application).filter(Application.id == id, Application.user_id == user.id).first()
+    result_app = await execute_db(db, select(Application).filter(Application.id == id, Application.user_id == user.id))
+    app_rec = result_app.scalars().first()
     if not app_rec:
         raise HTTPException(status_code=404, detail="Application not found.")
         
@@ -1314,7 +1451,7 @@ async def log_outcome(
     elif request.outcome_type in ["rejection", "withdraw"]:
         app_rec.status = "rejected"
         
-    db.commit()
+    await commit_db(db)
     return {"status": "success", "message": f"Outcome logged. Application status updated to {app_rec.status}."}
 
 class JDListResponse(BaseModel):
@@ -1325,11 +1462,12 @@ class JDListResponse(BaseModel):
 
 @app.get("/api/jd", response_model=List[JDListResponse])
 async def list_jds(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Lists all analyzed job descriptions."""
-    jds = db.query(JobDescription).filter(JobDescription.user_id == user.id).order_by(JobDescription.created_at.desc()).all()
+    result_jds = await execute_db(db, select(JobDescription).filter(JobDescription.user_id == user.id).order_by(JobDescription.created_at.desc()))
+    jds = result_jds.scalars().all()
     return [JDListResponse(id=j.id, company=j.company, title=j.title, created_at=j.created_at) for j in jds]
 
 class ResumeVersionListResponse(BaseModel):
@@ -1341,14 +1479,16 @@ class ResumeVersionListResponse(BaseModel):
 
 @app.get("/api/resume/versions", response_model=List[ResumeVersionListResponse])
 async def list_resume_versions(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Lists all generated resume versions."""
-    rvs = db.query(ResumeVersion).filter(ResumeVersion.user_id == user.id).order_by(ResumeVersion.created_at.desc()).all()
+    result_rvs = await execute_db(db, select(ResumeVersion).filter(ResumeVersion.user_id == user.id).order_by(ResumeVersion.created_at.desc()))
+    rvs = result_rvs.scalars().all()
     res_list = []
     for rv in rvs:
-        jd = db.query(JobDescription).filter(JobDescription.id == rv.jd_id).first() if rv.jd_id else None
+        result_jd = await execute_db(db, select(JobDescription).filter(JobDescription.id == rv.jd_id)) if rv.jd_id else None
+        jd = result_jd.scalars().first() if result_jd else None
         res_list.append(ResumeVersionListResponse(
             id=rv.id,
             version_number=rv.version_number,
@@ -1372,15 +1512,17 @@ class CoverLetterResponse(BaseModel):
 @app.post("/api/cover-letter/generate", response_model=CoverLetterResponse)
 async def generate_cover_letter(
     request: CoverLetterRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Generates a tailored cover letter grounded in evidence records and validates it."""
     import re
     
     # Fetch JD and Resume version
-    jd = db.query(JobDescription).filter(JobDescription.id == request.jd_id, JobDescription.user_id == user.id).first()
-    resume = db.query(ResumeVersion).filter(ResumeVersion.id == request.resume_version_id, ResumeVersion.user_id == user.id).first()
+    result_jd = await execute_db(db, select(JobDescription).filter(JobDescription.id == request.jd_id, JobDescription.user_id == user.id))
+    jd = result_jd.scalars().first()
+    result_resume = await execute_db(db, select(ResumeVersion).filter(ResumeVersion.id == request.resume_version_id, ResumeVersion.user_id == user.id))
+    resume = result_resume.scalars().first()
     
     if not jd or not resume:
         raise HTTPException(status_code=404, detail="Job description or resume version not found.")
@@ -1390,14 +1532,16 @@ async def generate_cover_letter(
     # Fetch selected or retrieved evidence
     evidence_texts = []
     if request.selected_evidence_ids:
-        chunks = db.query(DocumentChunk).filter(
+        result_chunks = await execute_db(db, select(DocumentChunk).filter(
             DocumentChunk.id.in_(request.selected_evidence_ids),
             DocumentChunk.user_id == user.id
-        ).all()
+        ))
+        chunks = result_chunks.scalars().all()
         evidence_texts = [c.chunk_text for c in chunks]
     else:
         # Fallback to general hybrid retrieval
-        reqs = db.query(SkillRequirement).filter(SkillRequirement.jd_id == jd.id).all()
+        result_reqs = await execute_db(db, select(SkillRequirement).filter(SkillRequirement.jd_id == jd.id))
+        reqs = result_reqs.scalars().all()
         req_names = [r.skill_name for r in reqs] if reqs else ["Python", "FastAPI"]
         
         sess = GenerationSession(
@@ -1406,7 +1550,7 @@ async def generate_cover_letter(
             session_type="cover_letter"
         )
         db.add(sess)
-        db.commit()
+        await commit_db(db)
         
         retrieval_state = {
             "user_id": str(user.id),
@@ -1473,7 +1617,8 @@ async def generate_cover_letter(
             
     if factual_sentences:
         # Create a session if not created
-        sess = db.query(GenerationSession).filter(GenerationSession.id == session_id).first()
+        result_sess = await execute_db(db, select(GenerationSession).filter(GenerationSession.id == session_id))
+        sess = result_sess.scalars().first()
         if not sess:
             sess = GenerationSession(
                 id=session_id,
@@ -1481,7 +1626,7 @@ async def generate_cover_letter(
                 session_type="cover_letter"
             )
             db.add(sess)
-            db.commit()
+            await commit_db(db)
             
         try:
             sentence_embeddings = await ai_gateway_client.embed(factual_sentences)
@@ -1507,7 +1652,7 @@ async def generate_cover_letter(
                         audit_comments=f"Cover Letter sentence failed grounding check. Max similarity: {max_sim:.4f} < 0.8"
                     )
                     db.add(event)
-                    db.commit()
+                    await commit_db(db)
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail=f"Anti-Hallucination block: Sentence '{factual_sentences[idx]}' lacks source evidence grounding (similarity {max_sim:.4f} < 0.8)."
@@ -1517,29 +1662,25 @@ async def generate_cover_letter(
         except Exception as e:
             logger.error(f"Semantic validation in cover letter generation failed, fallback check: {e}")
             for s in factual_sentences:
-                words_s = set([w.lower() for w in s.split() if len(w) > 4])
-                matched = False
+                max_lex_sim = 0.0
                 for ev in evidence_texts:
-                    words_ev = set([w.lower() for w in ev.split()])
-                    overlap = len(words_s.intersection(words_ev))
-                    sim = overlap / len(words_s) if words_s else 0.0
-                    if sim >= 0.5:
-                        matched = True
-                        break
-                if not matched:
+                    sim = jaccard_similarity(s, ev)
+                    if sim > max_lex_sim:
+                        max_lex_sim = sim
+                if max_lex_sim < 0.5:
                     event = HallucinationEvent(
                         id=uuid.uuid4(),
                         session_id=session_id,
                         user_id=user.id,
                         generated_snippet=s[:500],
                         validation_status="rejected",
-                        audit_comments="Cover Letter offline fallback lexical check failed."
+                        audit_comments=f"Cover Letter offline Jaccard fallback check failed ({max_lex_sim:.4f} < 0.5)."
                     )
                     db.add(event)
-                    db.commit()
+                    await commit_db(db)
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail=f"Anti-Hallucination block: Sentence '{s}' failed lexical grounding check."
+                        detail=f"Anti-Hallucination block: Sentence '{s}' failed Jaccard grounding check."
                     )
                     
     return CoverLetterResponse(cover_letter=cover_letter_text)
@@ -1566,14 +1707,16 @@ class PrepCardResponse(BaseModel):
 async def get_prep_cards(
     jd_id: uuid.UUID,
     resume_version_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Generates structured interview preparation card deck."""
     import json
     
-    jd = db.query(JobDescription).filter(JobDescription.id == jd_id, JobDescription.user_id == user.id).first()
-    resume = db.query(ResumeVersion).filter(ResumeVersion.id == resume_version_id, ResumeVersion.user_id == user.id).first()
+    result_jd = await execute_db(db, select(JobDescription).filter(JobDescription.id == jd_id, JobDescription.user_id == user.id))
+    jd = result_jd.scalars().first()
+    result_resume = await execute_db(db, select(ResumeVersion).filter(ResumeVersion.id == resume_version_id, ResumeVersion.user_id == user.id))
+    resume = result_resume.scalars().first()
     
     if not jd or not resume:
         raise HTTPException(status_code=404, detail="Job description or resume version not found.")
@@ -1581,15 +1724,18 @@ async def get_prep_cards(
     # Gather evidence texts
     evidence_texts = []
     if resume.evidence_bundle_id:
-        traces = db.query(TraceRecord).filter(TraceRecord.bundle_id == resume.evidence_bundle_id).all()
+        result_traces = await execute_db(db, select(TraceRecord).filter(TraceRecord.bundle_id == resume.evidence_bundle_id))
+        traces = result_traces.scalars().all()
         for t in traces:
-            chunk = db.query(DocumentChunk).filter(DocumentChunk.id == t.chunk_id).first()
+            result_chunk = await execute_db(db, select(DocumentChunk).filter(DocumentChunk.id == t.chunk_id))
+            chunk = result_chunk.scalars().first()
             if chunk:
                 evidence_texts.append(chunk.chunk_text)
                 
     if not evidence_texts:
         # Fallback hybrid retrieval to get some chunks if no explicit bundle is stored
-        reqs = db.query(SkillRequirement).filter(SkillRequirement.jd_id == jd.id).all()
+        result_reqs = await execute_db(db, select(SkillRequirement).filter(SkillRequirement.jd_id == jd.id))
+        reqs = result_reqs.scalars().all()
         req_names = [r.skill_name for r in reqs] if reqs else ["Python", "FastAPI"]
         session_id = uuid.uuid4()
         retrieval_state = {

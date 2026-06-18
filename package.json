@@ -15,6 +15,9 @@
     "test": "turbo run test"
   },
   "devDependencies": {
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "turbo": "^2.0.0",
     "typescript": "^5.0.0"
   }

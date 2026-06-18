@@ -1,0 +1,8 @@
+{
+  "name": "career-intelligence-studio-api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node -e \"const path = require('path'); process.env.PYTHONPATH=path.resolve('../..'); const cp = require('child_process'); const result = cp.spawnSync(path.resolve('.venv/Scripts/pytest.exe'), [], {stdio: 'inherit'}); process.exit(result.status || 0);\""
+  }
+}

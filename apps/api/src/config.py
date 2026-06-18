@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
     CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
+    ENV: str = os.getenv("ENV", "development")
+
     # JWT Settings
     JWT_SECRET: str = os.getenv("JWT_SECRET", "super-secret-key-cis-saas-production")
     JWT_ALGORITHM: str = "HS256"
@@ -28,5 +30,9 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         extra = "ignore"
+
+    def model_post_init(self, __context):
+        if self.ENV == "production" and self.JWT_SECRET == "super-secret-key-cis-saas-production":
+            raise ValueError("Insecure JWT_SECRET: Cannot use the default JWT_SECRET in production environment!")
 
 settings = Settings()
