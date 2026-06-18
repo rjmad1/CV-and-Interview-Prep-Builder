@@ -38,7 +38,7 @@ export default function OptimizePage() {
   // Helper to highlight additions and deletions in the diff
   const renderDiffLine = (line: string, idx: number) => {
     if (line.startsWith("+")) {
-      return <div key={idx} className="bg-emerald-950/40 text-emerald-400 p-1 font-mono rounded">{line}</div>;
+      return <div key={idx} className="bg-m3-secondary/15 text-m3-secondary p-1 font-mono rounded">{line}</div>;
     } else if (line.startsWith("-")) {
       return <div key={idx} className="bg-rose-950/40 text-rose-400 p-1 font-mono line-through rounded">{line}</div>;
     } else if (line.startsWith("@@")) {
@@ -74,7 +74,7 @@ export default function OptimizePage() {
             
             {jdAnalysis ? (
               <div className="space-y-4 text-xs">
-                <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-800">
+                <div className="p-3 bg-m3-surface rounded-lg border border-m3-outline/25">
                   <p className="font-semibold text-slate-300">Target Role: {jdAnalysis.title || "Software Engineer"}</p>
                   <p className="text-[10px] text-slate-500 mt-1">Company: {jdAnalysis.company || "Target Company"}</p>
                 </div>
@@ -84,17 +84,17 @@ export default function OptimizePage() {
                   <p className="text-[10px] text-slate-500">Only selected facts will be used for tailoring. If other statements are generated, the pipeline will block.</p>
                   <div className="space-y-2">
                     {evidenceChunks.map((item) => (
-                      <label key={item.chunk_id} className="flex gap-3 p-2.5 rounded-lg bg-slate-950/40 border border-slate-900 hover:border-slate-800 transition-all cursor-pointer">
+                      <label key={item.chunk_id} className="flex gap-3 p-2.5 rounded-lg bg-m3-surface border border-m3-outline/20 hover:border-m3-outline/40 transition-all cursor-pointer">
                         <input
                           type="checkbox"
                           checked={evidenceSelections.includes(item.chunk_id)}
                           onChange={() => handleCheckboxChange(item.chunk_id)}
-                          className="mt-1 accent-purple-500"
+                          className="mt-1 accent-m3-primary"
                         />
                         <div className="flex-1">
                           <p className="font-bold text-slate-300 text-[10px]">Evidence Fact</p>
                           <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-3 leading-relaxed">"{item.text_snippet}"</p>
-                          <div className="flex items-center justify-between mt-1 text-[9px] font-mono text-purple-400">
+                          <div className="flex items-center justify-between mt-1 text-[9px] font-mono text-m3-primary">
                             <span>Confidence: {Math.round(item.confidence * 100)}%</span>
                           </div>
                         </div>
@@ -109,7 +109,7 @@ export default function OptimizePage() {
                 <button
                   onClick={handleOptimizeSubmit}
                   disabled={loading}
-                  className="w-full py-2 font-bold text-white rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 transition-all disabled:opacity-50 glow-button"
+                  className="w-full py-2.5 font-bold text-m3-on-primary rounded-full bg-m3-primary hover:bg-m3-primary/95 transition-all disabled:opacity-50"
                 >
                   {loading ? "Generating groundings..." : "Optimize Resume Section"}
                 </button>
@@ -128,11 +128,11 @@ export default function OptimizePage() {
               <div className="glass-panel p-6 rounded-2xl space-y-4">
                 <h3 className="text-sm font-bold text-white flex items-center justify-between">
                   <span>⚙️</span> Section Tailoring Diff Preview
-                  <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-900 px-2 py-0.5 rounded">
+                  <span className="text-[10px] font-mono bg-m3-secondary/15 text-m3-secondary border border-m3-secondary/25 px-2 py-0.5 rounded">
                     Layout Preserved
                   </span>
                 </h3>
-                <div className="p-4 bg-slate-950 border border-slate-900 rounded-xl max-h-[350px] overflow-y-auto text-xs space-y-1">
+                <div className="p-4 bg-m3-surface border border-m3-outline/25 rounded-xl max-h-[350px] overflow-y-auto text-xs space-y-1">
                   {optimizedResume.diff ? (
                     optimizedResume.diff.split("\n").map((line, idx) => renderDiffLine(line, idx))
                   ) : (
@@ -148,14 +148,14 @@ export default function OptimizePage() {
                 </h3>
                 <div className="space-y-3">
                   {optimizedResume.evidence_bundle.map((item, idx) => (
-                    <div key={idx} className="p-3 bg-slate-900/30 border border-slate-800 rounded-xl flex items-start justify-between gap-4">
+                    <div key={idx} className="p-3 bg-m3-surface border border-m3-outline/25 rounded-xl flex items-start justify-between gap-4">
                       <div className="text-xs">
                         <p className="font-semibold text-slate-300">Snippet Source Citation</p>
                         <p className="text-slate-400 mt-1 italic">"{item.text_snippet}"</p>
                         <p className="text-[10px] text-slate-500 mt-1 font-mono">Chunk ID: {item.chunk_id}</p>
                       </div>
                       <div className="text-right">
-                        <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-900 font-mono">
+                        <span className="px-2 py-0.5 rounded text-[10px] bg-m3-secondary/15 text-m3-secondary border border-m3-secondary/25 font-mono">
                           {Math.round(item.confidence * 100)}% Match
                         </span>
                       </div>

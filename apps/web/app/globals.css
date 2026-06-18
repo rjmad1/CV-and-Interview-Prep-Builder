@@ -3,31 +3,36 @@
 @tailwind utilities;
 
 :root {
-  --background: 222 47% 6%;
+  /* Material Design 3 (M3) Dark Theme specification */
+  --md-sys-color-primary: #A8C7FA;        /* Interactive elements / Main CTAs */
+  --md-sys-color-on-primary: #062E6F;     /* Text/Icons inside primary elements */
+  --md-sys-color-primary-container: #004A77; /* Highlighted active containers/pills */
+  --md-sys-color-surface: #121318;        /* Main viewport/app background */
+  --md-sys-color-surface-container: #1F2025; /* Dashboard metrics and content cards */
+  --md-sys-color-surface-container-high: #2A2B30; /* Elevated navigation sidebar */
+  --md-sys-color-outline: #8E9199;        /* Subtle component borders and dividers */
+  --md-sys-color-secondary: #C4E7CB;      /* Metric highlights / Positive status */
+
+  /* Legacy utility fallbacks for full compatibility */
+  --background: 240 10% 8.4%;
   --foreground: 210 20% 98%;
-  
-  --card: 222 47% 9%;
+  --card: 240 5.9% 10%;
   --card-foreground: 210 20% 98%;
-  
-  --primary: 221.2 83.2% 53.3%;
-  --primary-foreground: 210 20% 98%;
-  
-  --secondary: 215 27.9% 16.9%;
-  --secondary-foreground: 210 20% 98%;
-  
-  --accent: 217.2 32.6% 17.5%;
+  --primary: 217.2 91.2% 82.2%;
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 136.4 39.4% 83.7%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --accent: 204.1 100% 23.3%;
   --accent-foreground: 210 20% 98%;
-  
-  --muted: 217.2 32.6% 17.5%;
+  --muted: 220 4.7% 57.6%;
   --muted-foreground: 215 20.2% 65.1%;
-  
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 221.2 83.2% 53.3%;
+  --border: 220 4.7% 57.6%;
+  --input: 220 4.7% 57.6%;
+  --ring: 217.2 91.2% 82.2%;
 }
 
 body {
-  background-color: hsl(var(--background));
+  background-color: var(--md-sys-color-surface);
   color: hsl(var(--foreground));
   font-family: var(--font-inter), 'Inter', sans-serif;
   overflow-x: hidden;
@@ -38,19 +43,17 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.02em;
 }
 
-/* Glassmorphic Cards & Panels */
+/* Material Design 3 Container Cards */
 .glass-panel {
-  background: rgba(8, 12, 28, 0.65);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline);
+  box-shadow: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-panel:hover {
-  border-color: rgba(99, 102, 241, 0.25);
-  box-shadow: 0 12px 40px 0 rgba(99, 102, 241, 0.1);
+  border-color: var(--md-sys-color-primary);
+  box-shadow: none;
 }
 
 /* Gradients */

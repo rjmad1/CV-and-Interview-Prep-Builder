@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 import type { Metadata } from "next";
 import { Inter, Outfit } from "next/font/google";
 import Sidebar from "./Sidebar";
@@ -28,21 +28,23 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`dark ${inter.variable} ${outfit.variable}`}>
-      <body className="gradient-bg-purple min-h-screen flex text-slate-100 antialiased selection:bg-purple-500 selection:text-white font-sans">
+      <body className="bg-m3-surface min-h-screen flex text-slate-100 antialiased selection:bg-m3-primary/30 selection:text-white font-sans">
         {/* Navigation Sidebar Panel */}
-        <Sidebar />
+        <Suspense fallback={<div className="w-64 bg-[var(--md-sys-color-surface-container-high)] border-r border-[var(--md-sys-color-outline)]/20 h-screen fixed" />}>
+          <Sidebar />
+        </Suspense>
 
         {/* Main Content Layout Wrapper */}
         <main className="flex-1 lg:pl-64 min-h-screen flex flex-col relative z-10 pt-16 lg:pt-0">
-          <header className="h-16 border-b border-slate-800 bg-slate-950/20 backdrop-blur-md flex items-center justify-between px-8 sticky top-0 z-10 hidden lg:flex">
+          <header className="h-16 border-b border-m3-outline/25 bg-m3-surface/60 backdrop-blur-md flex items-center justify-between px-8 sticky top-0 z-10 hidden lg:flex">
             <div className="flex items-center gap-2 text-xs font-mono text-slate-500">
               <span>ENV: development</span>
               <span className="text-slate-700">|</span>
-              <span className="text-purple-400">Gateway: Active</span>
+              <span className="text-m3-primary font-semibold">Gateway: Active</span>
             </div>
             <div className="flex items-center gap-4">
-              <button className="px-3 py-1.5 text-xs font-medium rounded-md border border-slate-700 bg-slate-900 hover:bg-slate-800 transition-all flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animated-pulse-ring"></span>
+              <button className="px-3.5 py-1.5 text-xs font-medium rounded-full border border-m3-outline/35 bg-m3-surface-container hover:bg-m3-surface-container-high/60 transition-all flex items-center gap-2 text-slate-350">
+                <span className="w-2 h-2 rounded-full bg-m3-secondary animated-pulse-ring"></span>
                 Local Security RLS Isolated
               </button>
             </div>
