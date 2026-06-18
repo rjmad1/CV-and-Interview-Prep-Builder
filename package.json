@@ -1,0 +1,21 @@
+{
+  "name": "career-intelligence-studio",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Career Intelligence Studio Production Engineering Monorepo",
+  "packageManager": "pnpm@11.2.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.0.0"
+  }
+}

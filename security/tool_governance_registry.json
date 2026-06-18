@@ -1,0 +1,33 @@
+{
+  "tools": [
+    {
+      "name": "view_file",
+      "risk_level": "Low",
+      "sandbox_required": false,
+      "approved_agents": ["Product Agent", "Architect Agent", "Backend Agent", "QA Agent", "Security Agent"],
+      "audit_required": false
+    },
+    {
+      "name": "replace_file_content",
+      "risk_level": "Medium",
+      "sandbox_required": false,
+      "approved_agents": ["Architect Agent", "Backend Agent", "QA Agent"],
+      "audit_required": true
+    },
+    {
+      "name": "write_to_file",
+      "risk_level": "Medium",
+      "sandbox_required": false,
+      "approved_agents": ["Product Agent", "Architect Agent", "Backend Agent", "QA Agent"],
+      "audit_required": true
+    },
+    {
+      "name": "run_command",
+      "risk_level": "High",
+      "sandbox_required": true,
+      "approved_agents": ["Backend Agent", "QA Agent", "Security Agent"],
+      "audit_required": true,
+      "human_approval_required": true
+    }
+  ]
+}

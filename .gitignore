@@ -1,0 +1,36 @@
+# Dependency directories
+node_modules/
+apps/web/node_modules/
+apps/api/.venv/
+.venv/
+
+# Build outputs
+dist/
+.turbo/
+apps/web/.next/
+.next/
+
+# Local databases & user data
+*.db
+*.db-journal
+career_intelligence_studio.db
+apps/api/career_intelligence_studio.db
+data/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+apps/api/.env
+
+# Logs and cache
+*.log
+.pytest_cache/
+apps/api/.pytest_cache/
+__pycache__/
+*.pyc
+
+# IDE configs
+.idea/
+.vscode/
+.gemini/

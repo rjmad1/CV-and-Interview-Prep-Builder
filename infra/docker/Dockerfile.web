@@ -1,0 +1,24 @@
+FROM node:20-alpine AS base
+
+# Install PNPM
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Copy lock files and workspaces configuration
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.json turbo.json /app/
+COPY apps/web/package.json /app/apps/web/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy app files
+COPY apps/web /app/apps/web
+
+# Build Next.js application
+WORKDIR /app/apps/web
+RUN pnpm build
+
+# Expose Next.js server port
+EXPOSE 3000
+CMD ["pnpm", "start"]

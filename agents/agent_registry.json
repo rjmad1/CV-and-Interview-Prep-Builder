@@ -1,0 +1,49 @@
+{
+  "agents": [
+    {
+      "name": "Product Agent",
+      "role": "Requirement Analyst",
+      "description": "Translates business needs into Spec-Kit specs.",
+      "permissions": ["specs:write", "knowledge:read"],
+      "tools": ["view_file", "write_to_file", "replace_file_content"],
+      "escalation_rules": "If requirement is ambiguous, escalate to Human Product Manager.",
+      "metrics": ["spec_completeness_score", "verification_speed"]
+    },
+    {
+      "name": "Architect Agent",
+      "role": "System Architect",
+      "description": "Designs system components, schemas, and API contracts.",
+      "permissions": ["contracts:write", "adrs:write", "specs:read"],
+      "tools": ["view_file", "write_to_file", "replace_file_content", "grep_search"],
+      "escalation_rules": "If schema violates backward compatibility, escalate to Human Architect.",
+      "metrics": ["cyclic_dep_violations", "adr_coverage"]
+    },
+    {
+      "name": "Backend Agent",
+      "role": "Software Developer",
+      "description": "Generates, refactors, and optimizes backend code.",
+      "permissions": ["src:write", "contracts:read"],
+      "tools": ["view_file", "replace_file_content", "run_command"],
+      "escalation_rules": "If package install error or compilation error persists > 2 retries, escalate to Tech Lead.",
+      "metrics": ["compilation_pass_rate", "lint_score"]
+    },
+    {
+      "name": "QA Agent",
+      "role": "Quality Assurance",
+      "description": "Creates unit/integration/E2E tests and executes validations.",
+      "permissions": ["tests:write", "src:read"],
+      "tools": ["view_file", "write_to_file", "run_command"],
+      "escalation_rules": "If test environment is unavailable, escalate to SRE.",
+      "metrics": ["test_coverage_percentage", "false_positive_rate"]
+    },
+    {
+      "name": "Security Agent",
+      "role": "DevSecOps Auditor",
+      "description": "Scans code and specs for vulnerability, leakages, or policy breach.",
+      "permissions": ["security:write", "src:read"],
+      "tools": ["view_file", "run_command"],
+      "escalation_rules": "On critical/high vulnerability detection, block CI pipeline and alert Security Lead.",
+      "metrics": ["leakages_blocked", "compliance_score"]
+    }
+  ]
+}

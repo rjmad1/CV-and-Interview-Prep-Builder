@@ -1,0 +1,457 @@
+openapi: 3.0.0
+info:
+  title: Career Intelligence Studio (CIS) API
+  description: API specifications for Career Archive, JD Analysis, Resume Optimization, ATS Scoring, and Grounded Interview Preparation.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Local Dev Server
+paths:
+  /api/documents/scan:
+    post:
+      summary: Scan and Ingest Document
+      description: Uploads a document (DOCX/PDF) to parse and index in the local Career Archive.
+      responses:
+        '202':
+          description: Ingestion job initiated successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  document_id:
+                    type: string
+                    format: uuid
+                  filename:
+                    type: string
+                  status:
+                    type: string
+                  metadata:
+                    type: object
+        '400':
+          description: Invalid file format or parameters.
+
+  /api/documents:
+    get:
+      summary: List Ingested Documents
+      description: Retrieves a list of all parsed career history files.
+      responses:
+        '200':
+          description: Successfully retrieved document list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Document'
+
+  /api/documents/{id}:
+    get:
+      summary: Retrieve Specific Document
+      description: Fetches a single document's metadata and extracted text.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Document details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '404':
+          description: Document not found.
+
+  /api/jd/analyze:
+    post:
+      summary: Analyze Job Description
+      description: Extracts key skills, required keywords, and calculates experience gap mappings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - jd_text
+              properties:
+                jd_text:
+                  type: string
+      responses:
+        '200':
+          description: Analysis report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JDAnalysis'
+
+  /api/jd/{id}:
+    get:
+      summary: Fetch Job Description Analysis
+      description: Retrieves the detailed analysis for a previously submitted Job Description.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job description details and gap reports.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JDAnalysis'
+        '404':
+          description: Analysis not found.
+
+  /api/resume/generate:
+    post:
+      summary: Generate Optimized Resume
+      description: Generates a new resume version matching a job description, grounded in historical evidence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - template_id
+                - jd_id
+                - selected_evidence_ids
+              properties:
+                template_id:
+                  type: string
+                  format: uuid
+                jd_id:
+                  type: string
+                  format: uuid
+                selected_evidence_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Resume generated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resume'
+
+  /api/resume/{id}:
+    get:
+      summary: Retrieve Resume Version
+      description: Retrieves the generated resume text and associated evidence audit trails.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Resume payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resume'
+        '404':
+          description: Resume not found.
+
+  /api/resume/{id}/diff:
+    get:
+      summary: Generate Resume Version Diff
+      description: Compares the generated version to the historical source document.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Unified diff text.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resume_id:
+                    type: string
+                    format: uuid
+                  diff:
+                    type: string
+
+  /api/ats/{id}:
+    get:
+      summary: Get ATS Analysis Report
+      description: Performs keyword analysis, semantic alignment scoring, and readability validation.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detailed ATS scoring reports.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ATSReport'
+
+  /api/interview/start:
+    post:
+      summary: Initialize Mock Interview
+      description: Starts an interview session grounded in the resume profile and job requirements.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - resume_id
+                - jd_id
+              properties:
+                resume_id:
+                  type: string
+                  format: uuid
+                jd_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Session initiated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id:
+                    type: string
+                    format: uuid
+                  question:
+                    type: string
+                  question_number:
+                    type: integer
+
+  /api/interview/respond:
+    post:
+      summary: Submit Answer
+      description: Submits user response and fetches coaching feedback.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+                - user_response
+              properties:
+                session_id:
+                  type: string
+                  format: uuid
+                user_response:
+                  type: string
+      responses:
+        '200':
+          description: Feedback and next question.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id:
+                    type: string
+                    format: uuid
+                  coaching_tips:
+                    type: string
+                  next_question:
+                    type: string
+                    nullable: true
+                  completed:
+                    type: boolean
+
+  /api/interview/report:
+    get:
+      summary: Get Final Interview Performance Report
+      description: Computes interview scoring metrics and detailed recommendations.
+      parameters:
+        - name: session_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detailed evaluation summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterviewReport'
+
+components:
+  schemas:
+    Document:
+      type: object
+      required:
+        - id
+        - filename
+        - document_type
+        - parsed_text
+        - metadata
+      properties:
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        document_type:
+          type: string
+        parsed_text:
+          type: string
+        metadata:
+          type: object
+
+    JDAnalysis:
+      type: object
+      required:
+        - jd_id
+        - extracted_skills
+        - keywords
+        - gap_analysis
+      properties:
+        jd_id:
+          type: string
+          format: uuid
+        extracted_skills:
+          type: array
+          items:
+            type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        gap_analysis:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillGap'
+
+    SkillGap:
+      type: object
+      required:
+        - skill
+        - importance
+        - status
+      properties:
+        skill:
+          type: string
+        importance:
+          type: string
+        status:
+          type: string
+
+    Resume:
+      type: object
+      required:
+        - resume_id
+        - version
+        - generated_text
+        - evidence_bundle
+      properties:
+        resume_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        generated_text:
+          type: string
+        evidence_bundle:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidenceItem'
+
+    EvidenceItem:
+      type: object
+      required:
+        - chunk_id
+        - confidence
+        - text_snippet
+      properties:
+        chunk_id:
+          type: string
+          format: uuid
+        confidence:
+          type: number
+          format: float
+        text_snippet:
+          type: string
+
+    ATSReport:
+      type: object
+      required:
+        - ats_score
+        - keyword_coverage
+        - semantic_match
+        - readability_score
+        - detailed_findings
+      properties:
+        ats_score:
+          type: number
+          format: float
+        keyword_coverage:
+          type: number
+          format: float
+        semantic_match:
+          type: number
+          format: float
+        readability_score:
+          type: number
+          format: float
+        detailed_findings:
+          type: object
+
+    InterviewReport:
+      type: object
+      required:
+        - session_id
+        - readiness_score
+        - key_strengths
+        - improvement_areas
+        - transcript
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        readiness_score:
+          type: number
+          format: float
+        key_strengths:
+          type: array
+          items:
+            type: string
+        improvement_areas:
+          type: array
+          items:
+            type: string
+        transcript:
+          type: array
+          items:
+            type: object
+            properties:
+              speaker:
+                type: string
+              text:
+                type: string

@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpenKnowledgeFormatMetadata",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^OKF-[A-Z]{3,4}-\\d{3}$"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "business_capability",
+        "engineering_standard",
+        "api_contract",
+        "troubleshooting_guide",
+        "infrastructure_spec",
+        "security_policy",
+        "glossary"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date"
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^OKF-[A-Z]{3,4}-\\d{3}$"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["id", "type", "title", "owner", "last_updated", "depends_on", "tags"]
+}
