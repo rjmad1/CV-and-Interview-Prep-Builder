@@ -28,7 +28,7 @@ else:
         pool_pre_ping=True
     )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)
 
 # --- Async Setup (for FastAPI router scalability) ---
 db_url_async = settings.DATABASE_URL
@@ -49,7 +49,7 @@ async_engine = create_async_engine(
     **({} if is_sqlite else {"pool_size": 20, "max_overflow": 10})
 )
 
-AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=async_engine, class_=AsyncSession)
+AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=async_engine, class_=AsyncSession, expire_on_commit=False)
 
 Base = declarative_base()
 

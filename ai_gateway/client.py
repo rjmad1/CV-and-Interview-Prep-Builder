@@ -137,24 +137,28 @@ class NIMClient:
             else:
                 return "achievement"
                 
-        elif "interview" in full_content and "question" in full_content and "generate" in full_content:
-            return """
-            [
-              {"id": "q1", "text": "Can you describe your experience implementing Row-Level Security (RLS) in PostgreSQL, and how you verified data isolation?"},
-              {"id": "q2", "text": "How have you handled scaling FastAPI applications with background tasks, particularly using Redis and Celery?"},
-              {"id": "q3", "text": "Describe a scenario where you integrated Docker and Next.js. What were the caching configurations you set?"}
-            ]
-            """
- 
-        elif "response" in full_content and ("evaluate" in full_content or "coach" in full_content):
-            return """
-            Excellent explanation. You should mention performance benchmarks and indexing strategies to make this response stronger.
-            """
-        
-        elif "report" in full_content or "readiness" in full_content:
-            return "85.0"
-
-        elif "analyze" in full_content or "job description" in full_content:
+        elif "expert recruiter and technical analyst" in full_content:
+            if "covasant" in full_content or "solution architect" in full_content:
+                return """
+                {
+                  "company": "Covasant",
+                  "title": "Solution Architect Data & AI",
+                  "extracted_skills": ["Solution Architecture", "Data Architecture", "Enterprise Integration", "MDM", "Neo4j", "RDF/OWL", "GCP/Azure", "LLM Orchestration", "Vector Databases", "Data Governance"],
+                  "required_keywords": ["Golden Record", "Universal Connectivity", "Neo4j", "GCP Professional Architect", "LangGraph", "Vector Databases"],
+                  "gap_analysis": [
+                    {"skill": "Solution Architecture", "importance": "high", "status": "matched"},
+                    {"skill": "Data Architecture", "importance": "high", "status": "matched"},
+                    {"skill": "Enterprise Integration", "importance": "high", "status": "matched"},
+                    {"skill": "MDM", "importance": "high", "status": "matched"},
+                    {"skill": "Neo4j", "importance": "medium", "status": "missing"},
+                    {"skill": "RDF/OWL", "importance": "medium", "status": "missing"},
+                    {"skill": "GCP/Azure", "importance": "medium", "status": "matched"},
+                    {"skill": "LLM Orchestration", "importance": "medium", "status": "matched"},
+                    {"skill": "Vector Databases", "importance": "medium", "status": "matched"},
+                    {"skill": "Data Governance", "importance": "low", "status": "matched"}
+                  ]
+                }
+                """
             return """
             {
               "company": "NVIDIA",
@@ -172,12 +176,37 @@ class NIMClient:
               ]
             }
             """
-        
-        elif "optimize" in full_content or "tailor" in full_content or "bullet" in full_content:
+
+        elif "expert resume writer" in full_content or "optimize the professional experience" in full_content:
+            if "covasant" in full_content or "solution architect" in full_content:
+                return """
+                - Designed and architected end-to-end enterprise integration architecture for CRM, ERP, and data lakes across Retail and Consumer Goods verticals.
+                - Configured Universal Connectivity layer and managed master data management (MDM) platforms, including Oracle Supplier Hub and Hyperion DRM.
+                - Devised solutions incorporating LangGraph orchestration frameworks and vector database systems to optimize enterprise data workflows.
+                """
             return """
             - Engineered and maintained high-performance Python microservices utilizing FastAPI, boosting API throughput by 42%.
             - Implemented advanced PostgreSQL configurations, enforcing tenant isolation using Row-Level Security policies to protect customer data.
             - Configured automated deployment tasks using Docker containerization, reducing staging deploy times by 30%.
             """
+
+        elif "elite interviewer" in full_content or "generate exactly 3" in full_content:
+            return """
+            [
+              {"id": "q1", "text": "Can you describe your experience implementing Row-Level Security (RLS) in PostgreSQL, and how you verified data isolation?"},
+              {"id": "q2", "text": "How have you handled scaling FastAPI applications with background tasks, particularly using Redis and Celery?"},
+              {"id": "q3", "text": "Describe a scenario where you integrated Docker and Next.js. What were the caching configurations you set?"}
+            ]
+            """
+ 
+        elif "interview performance coach" in full_content or "evaluate the candidate's response" in full_content:
+            return """
+            Excellent explanation. You should mention performance benchmarks and indexing strategies to make this response stronger.
+            """
+        
+        elif "hiring manager grading" in full_content or "numeric readiness score" in full_content:
+            return "85.0"
+ 
+        return f"Mock response for model {model}. Enforced truth preservation and evidence-based grounding."
  
         return f"Mock response for model {model}. Enforced truth preservation and evidence-based grounding."

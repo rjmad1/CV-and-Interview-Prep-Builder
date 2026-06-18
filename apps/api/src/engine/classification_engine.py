@@ -13,7 +13,12 @@ class ClassificationEngine:
             r"\b(work|professional|employment)\s+experience\b",
             r"\bcareer\s+(summary|history|objective)\b",
             r"\bkey\s+skills\b",
-            r"\beducation\s+&\s+experience\b"
+            r"\beducation\s+&\s+experience\b",
+            r"\bprofessional\s+summary\b",
+            r"\bemployment\s+chronicle\b",
+            r"\bprevious\s+assignments\b",
+            r"\bcareer\s+milestones\b",
+            r"\bit\s+forte\b"
         ]
         self.verification_patterns = [
             r"\b(certificate|certification|certified|credential)\b",

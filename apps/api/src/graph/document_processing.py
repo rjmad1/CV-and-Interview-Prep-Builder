@@ -118,7 +118,63 @@ def store_document(state: DocumentState) -> Dict[str, Any]:
             db.add(document)
         db.commit()
 
-        # 2. Index chunks and embeddings via EmbeddingPipeline logic helper
+        # 2. Extract and store user skills from resume in database
+        if state["document_type"] == "resume":
+            from apps.api.src.models import Skill
+            # Clean existing user skills to prevent duplicates
+            db.query(Skill).filter(Skill.user_id == user_id).delete()
+            db.commit()
+            
+            # Simple keyword-based extraction taxonomy
+            SKILLS_TAXONOMY = [
+                ("Python", "technical"),
+                ("FastAPI", "technical"),
+                ("PostgreSQL", "technical"),
+                ("React", "technical"),
+                ("Docker", "technical"),
+                ("Kubernetes", "technical"),
+                ("Next.js", "technical"),
+                ("Solution Architecture", "technical"),
+                ("Data Architecture", "technical"),
+                ("Enterprise Integration", "technical"),
+                ("MDM", "technical"),
+                ("MuleSoft", "technical"),
+                ("Talend", "technical"),
+                ("Informatica", "technical"),
+                ("Neo4j", "technical"),
+                ("RDF", "technical"),
+                ("OWL", "technical"),
+                ("GCP", "technical"),
+                ("Azure", "technical"),
+                ("AWS", "technical"),
+                ("SAP", "technical"),
+                ("Salesforce", "technical"),
+                ("Oracle", "technical"),
+                ("LangGraph", "technical"),
+                ("LangChain", "technical"),
+                ("Pinecone", "technical"),
+                ("Weaviate", "technical"),
+                ("ChromaDB", "technical"),
+                ("Data Governance", "technical"),
+                ("GDPR", "technical"),
+                ("DPDP", "technical"),
+                ("CCPA", "technical")
+            ]
+            
+            parsed_lower = state["parsed_text"].lower()
+            for skill_name, category in SKILLS_TAXONOMY:
+                if skill_name.lower() in parsed_lower:
+                    new_skill = Skill(
+                        id=py_uuid.uuid4(),
+                        user_id=user_id,
+                        name=skill_name,
+                        category=category,
+                        proficiency_level="Expert"
+                    )
+                    db.add(new_skill)
+            db.commit()
+
+        # 3. Index chunks and embeddings via EmbeddingPipeline logic helper
         pipeline = EmbeddingPipeline()
         # Clean existing chunks to avoid duplication
         from apps.api.src.models import DocumentChunk

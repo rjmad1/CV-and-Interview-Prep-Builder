@@ -331,7 +331,7 @@ async def scan_document(
             result = await document_processing_graph.ainvoke(initial_state)
             logger.info(f"Inline document processing completed with status: {result.get('status')}")
         except Exception as inline_err:
-            logger.error(f"Inline document processing failed: {inline_err}")
+            logger.error(f"Inline document processing failed: {inline_err}", exc_info=True)
     
     return DocumentScanResponse(
         document_id=document_id,
