@@ -34,3 +34,5 @@ __pycache__/
 .idea/
 .vscode/
 .gemini/
+
+.vercel
