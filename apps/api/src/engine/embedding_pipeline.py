@@ -2,7 +2,7 @@ import uuid
 import logging
 from typing import List, Dict, Any, Optional
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams, PointStruct
+from qdrant_client.http.models import Distance, VectorParams, PointStruct, PayloadSchemaType
 from apps.api.src.config import settings
 from apps.api.src.models import DocumentChunk
 from apps.api.src.utils.ai_client import ai_gateway_client
@@ -11,6 +11,7 @@ logger = logging.getLogger("cis-embedding-pipeline")
 
 class EmbeddingPipeline:
     def __init__(self, qdrant_url: Optional[str] = None):
+        self.qdrant_url = qdrant_url or settings.QDRURL if hasattr(settings, "QDRURL") else getattr(settings, "QDRANT_URL", "http://localhost:6333")
         self.qdrant_url = qdrant_url or settings.QDRANT_URL
         try:
             self.qdrant_client = QdrantClient(url=self.qdrant_url)
@@ -32,6 +33,16 @@ class EmbeddingPipeline:
                     vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
                 )
                 logger.info(f"Created Qdrant collection: {collection_name}")
+                
+                try:
+                    self.qdrant_client.create_payload_index(
+                        collection_name=collection_name,
+                        field_name="user_id",
+                        field_schema=PayloadSchemaType.KEYWORD,
+                    )
+                    logger.info(f"Created keyword payload index on user_id for collection: {collection_name}")
+                except Exception as index_err:
+                    logger.warning(f"Failed to create Qdrant payload index on user_id: {index_err}")
 
     def chunk_text(self, text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
         """

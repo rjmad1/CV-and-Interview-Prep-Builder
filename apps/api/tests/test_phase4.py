@@ -275,3 +275,63 @@ def test_application_tracking_crud_pipeline(client):
     list_after_delete = client.get("/api/applications")
     assert not any(a["id"] == app_id for a in list_after_delete.json())
 
+def test_mock_interview_flow(client):
+    db = next(app.dependency_overrides[get_db]())
+    user = db.query(User).first()
+    template = db.query(ResumeTemplate).first()
+    
+    # Create JD
+    jd = JobDescription(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        company="NVIDIA",
+        title="Senior AI Architect",
+        raw_text="Required skills: Python, FastAPI, PostgreSQL RLS."
+    )
+    db.add(jd)
+    
+    # Create Resume Version
+    resume = ResumeVersion(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        template_id=template.id,
+        version_number=1,
+        jd_id=jd.id,
+        generated_text="Staff Architect with extensive background in Python development.",
+        file_path="resume_v1.docx"
+    )
+    db.add(resume)
+    db.commit()
+
+    # 1. Start Interview
+    payload = {
+        "resume_id": str(resume.id),
+        "jd_id": str(jd.id)
+    }
+    response = client.post("/api/interview/start", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "session_id" in data
+    assert "question" in data
+    assert data["question_number"] == 1
+    session_id = data["session_id"]
+    
+    # 2. Respond to Question
+    respond_payload = {
+        "session_id": session_id,
+        "user_response": "I have set up many FastAPI backends and used PostgreSQL RLS for multi-tenant isolation."
+    }
+    response_resp = client.post("/api/interview/respond", json=respond_payload)
+    assert response_resp.status_code == 200
+    resp_data = response_resp.json()
+    assert "coaching_tips" in resp_data
+    
+    # 3. Retrieve Report
+    report_response = client.get(f"/api/interview/report?session_id={session_id}")
+    assert report_response.status_code == 200
+    report_data = report_response.json()
+    assert "readiness_score" in report_data
+    assert "transcript" in report_data
+    assert len(report_data["transcript"]) >= 2
+
+

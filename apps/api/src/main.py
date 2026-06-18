@@ -17,7 +17,7 @@ from apps.api.src.models import (
     User, Document, DocumentChunk, JobDescription, SkillRequirement, GapAnalysis,
     GenerationSession, EvidenceBundle, TraceRecord, ResumeTemplate,
     ResumeVersion, ResumeDiff, ATSReport, KeywordAnalysis,
-    Application, Interview, Outcome, HallucinationEvent
+    Application, Interview, Outcome, HallucinationEvent, InterviewSessionState
 )
 import numpy as np
 from apps.api.src.utils.ai_client import ai_gateway_client
@@ -75,29 +75,30 @@ logger.info("Database tables verified/created successfully.")
 async def execute_db(db, query):
     from sqlalchemy.ext.asyncio import AsyncSession
     if isinstance(db, AsyncSession):
-        return await execute_db(db, query)
+        return await db.execute(query)
     return db.execute(query)
 
 async def commit_db(db):
     from sqlalchemy.ext.asyncio import AsyncSession
     if isinstance(db, AsyncSession):
-        await commit_db(db)
+        await db.commit()
     else:
         db.commit()
 
 async def refresh_db(db, obj):
     from sqlalchemy.ext.asyncio import AsyncSession
     if isinstance(db, AsyncSession):
-        await refresh_db(db, obj)
+        await db.refresh(obj)
     else:
         db.refresh(obj)
 
 async def delete_db(db, obj):
     from sqlalchemy.ext.asyncio import AsyncSession
     if isinstance(db, AsyncSession):
-        await delete_db(db, obj)
+        await db.delete(obj)
     else:
         db.delete(obj)
+
 
 
 # ----------------------------------------------------
@@ -790,9 +791,6 @@ async def get_ats_report(
 
 # --- Interview Preparation Router ---
 
-# Mock Interview Session store mapping session UUID to graph state dict
-interview_sessions = {}
-
 @app.post("/api/interview/start", response_model=InterviewSessionResponse)
 async def start_interview(
     request: InterviewStartRequest,
@@ -837,9 +835,6 @@ async def start_interview(
     # Trigger graph generation
     res = await interview_prep_graph.ainvoke(initial_state)
     
-    # Store state session
-    interview_sessions[str(session_id)] = res
-    
     # Save session record to DB
     sess = GenerationSession(
         id=session_id,
@@ -847,6 +842,14 @@ async def start_interview(
         session_type="interview_prep"
     )
     db.add(sess)
+    
+    # Save the graph state to InterviewSessionState
+    session_state = InterviewSessionState(
+        id=session_id,
+        user_id=user.id,
+        session_data=res
+    )
+    db.add(session_state)
     await commit_db(db)
     
     first_q = res.get("generated_questions", [{"text": "Tell me about yourself"}])[0]["text"]
@@ -864,11 +867,18 @@ async def respond_to_question(
     user: User = Depends(get_current_user)
 ):
     """Records user response and returns inline coaching tips and the next question."""
-    sess_id_str = str(request.session_id)
-    if sess_id_str not in interview_sessions:
+    sess_id = request.session_id
+    
+    # Retrieve session state from DB
+    result_state = await execute_db(db, select(InterviewSessionState).filter(
+        InterviewSessionState.id == sess_id,
+        InterviewSessionState.user_id == user.id
+    ))
+    session_state = result_state.scalars().first()
+    if not session_state:
         raise HTTPException(status_code=404, detail="Interview session not found or expired")
         
-    state = interview_sessions[sess_id_str]
+    state = session_state.session_data
     active_idx = state.get("active_question_index", 0)
     questions = state.get("generated_questions", [])
     
@@ -878,9 +888,11 @@ async def respond_to_question(
     state["user_responses"] = responses
     
     # Evaluate response (run coach node in graph)
-    # We update the state context and call evaluation
     res = await interview_prep_graph.ainvoke(state)
-    interview_sessions[sess_id_str] = res
+    
+    # Sync updated fields back to state dictionary (such as coaching_feedback and status)
+    state["coaching_feedback"] = res.get("coaching_feedback", [])
+    state["status"] = res.get("status", "")
     
     feedback_list = res.get("coaching_feedback", [])
     coaching_tips = feedback_list[-1] if feedback_list else "Good job."
@@ -897,10 +909,17 @@ async def respond_to_question(
         # Perform final readiness score
         state["active_question_index"] = next_idx
         final_res = await interview_prep_graph.ainvoke(state)
-        interview_sessions[sess_id_str] = final_res
+        state["readiness_score"] = final_res.get("readiness_score", 85.0)
+        state["status"] = final_res.get("status", "completed")
         
+    # Persist state back to DB
+    from sqlalchemy.orm.attributes import flag_modified
+    session_state.session_data = state
+    flag_modified(session_state, "session_data")
+    await commit_db(db)
+    
     return InterviewFeedbackResponse(
-        session_id=request.session_id,
+        session_id=sess_id,
         coaching_tips=coaching_tips,
         next_question=next_q,
         completed=completed
@@ -930,11 +949,15 @@ async def get_interview_report(
     user: User = Depends(get_current_user)
 ):
     """Generates final interview readiness feedback, key strengths, and areas of improvement."""
-    sess_id_str = str(session_id)
-    if sess_id_str not in interview_sessions:
+    result_state = await execute_db(db, select(InterviewSessionState).filter(
+        InterviewSessionState.id == session_id,
+        InterviewSessionState.user_id == user.id
+    ))
+    session_state = result_state.scalars().first()
+    if not session_state:
         raise HTTPException(status_code=404, detail="Interview session report not found")
         
-    state = interview_sessions[sess_id_str]
+    state = session_state.session_data
     score = state.get("readiness_score", 85.0)
     questions = state.get("generated_questions", [])
     responses = state.get("user_responses", [])

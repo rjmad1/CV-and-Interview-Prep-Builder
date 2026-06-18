@@ -22,6 +22,11 @@ class InterviewState(TypedDict):
 
 async def generate_questions(state: InterviewState) -> Dict[str, Any]:
     """Generates job-specific behavioral and technical interview questions."""
+    # Prevent regeneration if questions are already present in the state
+    if state.get("generated_questions"):
+        logger.info("Questions already generated. Skipping regeneration node.")
+        return {"status": state.get("status", "questions_ready")}
+
     logger.info("Generating grounded technical and situational questions...")
     resume_text = state["resume_text"]
     jd_text = state["jd_text"]
