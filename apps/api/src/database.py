@@ -21,11 +21,15 @@ if is_sqlite:
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 else:
+    connect_args = {}
+    if settings.ENV == "production":
+        connect_args["sslmode"] = "require"
     engine = create_engine(
         db_url_sync,
         pool_size=20,
         max_overflow=10,
-        pool_pre_ping=True
+        pool_pre_ping=True,
+        connect_args=connect_args
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)
@@ -43,9 +47,14 @@ else:
     elif db_url_async.startswith("postgres://"):
         db_url_async = db_url_async.replace("postgres://", "postgresql+asyncpg://", 1)
 
+connect_args = {}
+if not is_sqlite and settings.ENV == "production":
+    connect_args["ssl"] = "require"
+
 async_engine = create_async_engine(
     db_url_async,
     pool_pre_ping=True,
+    connect_args=connect_args,
     **({} if is_sqlite else {"pool_size": 20, "max_overflow": 10})
 )
 

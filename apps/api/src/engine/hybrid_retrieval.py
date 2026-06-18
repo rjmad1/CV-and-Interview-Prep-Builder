@@ -75,17 +75,29 @@ class HybridRetrieval:
             
             # 2. Search Qdrant with tenant filter
             from qdrant_client.http import models as qdrant_models
+            
+            query_filter = qdrant_models.Filter(
+                must=[
+                    qdrant_models.FieldCondition(
+                        key="user_id",
+                        match=qdrant_models.MatchValue(value=str(uid))
+                    )
+                ]
+            )
+            
+            # Tenant isolation validation check
+            if not any(
+                isinstance(cond, qdrant_models.FieldCondition) 
+                and cond.key == "user_id" 
+                and cond.match.value == str(uid)
+                for cond in query_filter.must
+            ):
+                raise ValueError("Tenant isolation validation failed: query filter must specify a valid matching user_id")
+                
             search_response = self.qdrant_client.query_points(
                 collection_name="career_chunks",
                 query=query_vector,
-                query_filter=qdrant_models.Filter(
-                    must=[
-                        qdrant_models.FieldCondition(
-                            key="user_id",
-                            match=qdrant_models.MatchValue(value=str(uid))
-                        )
-                    ]
-                ),
+                query_filter=query_filter,
                 limit=limit
             )
             search_results = search_response.points

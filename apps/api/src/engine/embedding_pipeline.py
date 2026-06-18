@@ -166,6 +166,15 @@ class EmbeddingPipeline:
         # Commit to SQL DB
         db_session.commit()
         
+        # Tenant isolation validation check
+        if qdrant_points:
+            for pt in qdrant_points:
+                if "user_id" not in pt.payload or pt.payload["user_id"] != str(user_id):
+                    raise ValueError(
+                        f"Tenant isolation validation failed: point payload contains incorrect or missing user_id. "
+                        f"Expected: {user_id}, got: {pt.payload.get('user_id')}"
+                    )
+        
         # Upsert to Qdrant
         if self.qdrant_client and qdrant_points:
             try:

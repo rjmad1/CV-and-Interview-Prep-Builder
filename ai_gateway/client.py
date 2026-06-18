@@ -137,7 +137,7 @@ class NIMClient:
             else:
                 return "achievement"
                 
-        elif "expert recruiter and technical analyst" in full_content:
+        elif "expert recruiter and technical analyst" in full_content or "analyze job description" in full_content:
             if "covasant" in full_content or "solution architect" in full_content:
                 return """
                 {
