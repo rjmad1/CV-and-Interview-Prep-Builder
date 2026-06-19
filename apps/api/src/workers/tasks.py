@@ -42,12 +42,6 @@ def process_document_task(document_id: str, user_id: str, file_path: str):
         result = await document_processing_graph.ainvoke(initial_state)
         return result
 
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-    result = loop.run_until_complete(run_flow())
+    result = asyncio.run(run_flow())
     logger.info(f"Ingestion flow finished with status: {result.get('status')}")
     return result.get("status")

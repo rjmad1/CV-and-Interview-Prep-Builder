@@ -43,7 +43,7 @@ class HybridRetrieval:
                         "score": 1.0  # Base occurrence weight
                     })
             
-            # Deduplicate and calculate query-term frequency frequency weights
+            # Deduplicate and calculate query-term frequency weights
             unique_chunks = {}
             for chunk in matched_chunks:
                 cid = chunk["chunk_id"]
@@ -53,10 +53,31 @@ class HybridRetrieval:
                     unique_chunks[cid]["score"] += 1.0
                     
             sorted_chunks = sorted(unique_chunks.values(), key=lambda x: x["score"], reverse=True)
-            return sorted_chunks[:limit]
+            results = sorted_chunks[:limit]
+            
+            # Always supplement with ALL user chunks not already in results.
+            # This ensures the anti-hallucination validator has the complete resume corpus
+            # as grounding evidence, since generated bullets can reference content from any section.
+            all_chunks = self.db.query(DocumentChunk).filter(
+                DocumentChunk.user_id == uid
+            ).limit(limit).all()
+            seen_ids = {c["chunk_id"] for c in results}
+            for chunk in all_chunks:
+                cid = str(chunk.id)
+                if cid not in seen_ids:
+                    results.append({
+                        "chunk_id": cid,
+                        "text": chunk.chunk_text,
+                        "score": 0.5  # Base supplemental score
+                    })
+                    seen_ids.add(cid)
+            
+            logger.info(f"Sparse search returning {len(results)} chunks (keyword-matched + full corpus supplement)")
+            return results
         except Exception as e:
             logger.error(f"Sparse search error: {e}")
             return []
+
 
     async def dense_search(self, user_id: Any, requirements: List[str], limit: int = 10) -> List[Dict[str, Any]]:
         """Runs vector similarity dense search against Qdrant database."""

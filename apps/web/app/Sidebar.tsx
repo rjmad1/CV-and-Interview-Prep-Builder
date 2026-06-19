@@ -105,28 +105,7 @@ export default function Sidebar() {
             onClick={() => setOpen(false)}
             className={navLinkClass("/")}
           >
-            <span>📊</span> Dashboard
-          </a>
-          <a
-            href="/archive"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/archive")}
-          >
-            <span>📁</span> Career Documents
-          </a>
-          <a
-            href="/archive?type=resumes"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/archive?type=resumes")}
-          >
-            <span>📄</span> Resume Library
-          </a>
-          <a
-            href="/jd-analysis"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/jd-analysis")}
-          >
-            <span>🎯</span> Job Description Analyzer
+            <span>📁</span> CV Vault
           </a>
           <a
             href="/optimize"
@@ -136,27 +115,6 @@ export default function Sidebar() {
             <span>⚙️</span> CV Optimizer
           </a>
           <a
-            href="/grounding-audit"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/grounding-audit")}
-          >
-            <span>🛡️</span> Grounding Auditor
-          </a>
-          <a
-            href="/cover-letter"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/cover-letter")}
-          >
-            <span>✉️</span> Cover Letter Generator
-          </a>
-          <a
-            href="/ats-report"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/ats-report")}
-          >
-            <span>📈</span> ATS Match Report
-          </a>
-          <a
             href="/applications"
             onClick={() => setOpen(false)}
             className={navLinkClass("/applications")}
@@ -164,46 +122,11 @@ export default function Sidebar() {
             <span>📅</span> Application Tracker
           </a>
           <a
-            href="/interview?mode=prep"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/interview?mode=prep")}
-          >
-            <span>💡</span> Interview Preparation
-          </a>
-          <a
             href="/interview"
             onClick={() => setOpen(false)}
             className={navLinkClass("/interview")}
           >
-            <span>🗣️</span> Mock Interviews
-          </a>
-          <a
-            href="/skills-gap"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/skills-gap")}
-          >
-            <span>📊</span> Skills Gap Analysis
-          </a>
-          <a
-            href="/learning"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/learning")}
-          >
-            <span>🎓</span> Learning Recommendations
-          </a>
-          <a
-            href="/saved-applications"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/saved-applications")}
-          >
-            <span>⭐</span> Saved Applications
-          </a>
-          <a
-            href="/settings"
-            onClick={() => setOpen(false)}
-            className={navLinkClass("/settings")}
-          >
-            <span>🛠️</span> Settings
+            <span>🗣️</span> Interview Simulator
           </a>
         </nav>
 

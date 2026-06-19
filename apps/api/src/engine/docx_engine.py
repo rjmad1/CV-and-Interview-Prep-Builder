@@ -448,4 +448,4 @@ class DocxEngine:
         
         doc.save(path)
         logger.info(f"Created default base resume template at {path}")
-ZOOM_COEFFICIENT = 0.8
+

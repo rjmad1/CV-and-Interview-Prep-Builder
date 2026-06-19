@@ -32,8 +32,14 @@ def scan_file(state: DocumentState) -> Dict[str, Any]:
         logger.warning(f"File {file_path} not found. Creating mock file contents for pipeline.")
         file_content = b"Mock Resume Content: John Doe is a Senior Python Developer with 6 years experience in FastAPI and PostgreSQL RLS."
     else:
-        with open(file_path, "rb") as f:
-            file_content = f.read()
+        from apps.api.src.utils.encryption import read_vault_file
+        from apps.api.src.config import settings
+        try:
+            file_content = read_vault_file(file_path, decrypt=settings.STORAGE_ENCRYPTION_ACTIVE)
+        except Exception:
+            # Fallback to plain read if decryption fails
+            with open(file_path, "rb") as f:
+                file_content = f.read()
     return {
         "file_content": file_content,
         "status": "scanned"
@@ -54,7 +60,15 @@ def parse_file(state: DocumentState) -> Dict[str, Any]:
 
 async def classify_doc(state: DocumentState) -> Dict[str, Any]:
     """Classifies document type based on contents (e.g. Resume vs Certification)."""
-    logger.info("Classifying document type...")
+    current_type = state.get("document_type", "resume")
+    if current_type and current_type not in ["resume", "verification", "achievement"]:
+        logger.info(f"Preserving user-specified document type: {current_type}")
+        return {
+            "document_type": current_type,
+            "status": "classified"
+        }
+        
+    logger.info("Classifying document type based on content...")
     parsed_text = state["parsed_text"]
     
     classifier = ClassificationEngine()

@@ -1,106 +1,37 @@
 import { create } from "zustand";
+import { apiFetch, API_BASE } from "./api/apiFetch";
+import type {
+  DocumentInfo,
+  SkillGap,
+  JDAnalysis,
+  JDListItem,
+  EvidenceItem,
+  ResumeVersion,
+  ResumeVersionListItem,
+  ATSReport,
+  HallucinationEvent,
+  VerifyClaimResponse,
+  Application,
+  InterviewRound,
+  InterviewSession,
+  CoverLetterVersionItem,
+  PrepCards,
+} from "./types";
 
-export interface DocumentInfo {
-  id: string;
-  filename: string;
-  document_type: string;
-  parsed_text: string | null;
-  metadata: any;
-}
-
-export interface SkillGap {
-  skill: string;
-  importance: string;
-  status: string;
-}
-
-export interface JDAnalysis {
-  jd_id: string;
-  extracted_skills: string[];
-  keywords: string[];
-  gap_analysis: SkillGap[];
-  title?: string;
-  company?: string;
-}
-
-export interface EvidenceItem {
-  chunk_id: string;
-  confidence: number;
-  text_snippet: string;
-}
-
-export interface ResumeVersion {
-  resume_id: string;
-  version: number;
-  generated_text: string;
-  evidence_bundle: EvidenceItem[];
-  diff?: string;
-}
-
-export interface ATSReport {
-  ats_score: number;
-  keyword_coverage: number;
-  semantic_match: number;
-  readability_score: number;
-  detailed_findings: {
-    matching_keywords: string[];
-    missing_keywords: string[];
-    readability_issues: string[];
-    score_rationale: string;
-    recommendation?: string;
-  };
-}
-
-export interface HallucinationEvent {
-  id: string;
-  session_id: string;
-  generated_snippet: string;
-  validation_status: string;
-  audit_comments: string | null;
-  created_at: string;
-}
-
-export interface VerifyClaimResponse {
-  passed: boolean;
-  similarity_score: number;
-  matched_chunk_id: string | null;
-  matched_chunk_text: string | null;
-}
-
-export interface Application {
-  id: string;
-  jd_id: string;
-  resume_version_id: string;
-  status: string;
-  notes: string | null;
-  company: string;
-  title: string;
-  created_at: string;
-}
-
-export interface InterviewRound {
-  id: string;
-  application_id: string;
-  scheduled_at: string;
-  round_number: number;
-  interviewer_info: string | null;
-  status: string;
-}
-
-export interface InterviewSession {
-  session_id: string;
-  active_question: string;
-  question_number: number;
-  coaching_tips?: string;
-  completed: boolean;
-  next_question?: string | null;
-  report?: {
-    readiness_score: number;
-    key_strengths: string[];
-    improvement_areas: string[];
-    transcript: { speaker: string; text: string }[];
-  };
-}
+// Re-export types so existing consumers don't break
+export type {
+  DocumentInfo,
+  SkillGap,
+  JDAnalysis,
+  EvidenceItem,
+  ResumeVersion,
+  ATSReport,
+  HallucinationEvent,
+  VerifyClaimResponse,
+  Application,
+  InterviewRound,
+  InterviewSession,
+};
 
 interface CISState {
   documents: DocumentInfo[];
@@ -113,15 +44,17 @@ interface CISState {
   applications: Application[];
   interviews: Record<string, InterviewRound[]>;
   coverLetter: string | null;
-  prepCards: any | null;
-  jdsList: Array<{ id: string; company: string; title: string }>;
-  resumeVersionsList: Array<{ id: string; version_number: number; jd_title: string | null; jd_company: string | null }>;
+  prepCards: PrepCards | null;
+  jdsList: JDListItem[];
+  resumeVersionsList: ResumeVersionListItem[];
+  coverLettersList: CoverLetterVersionItem[];
   loading: boolean;
   error: string | null;
-  
+
   // Actions
   fetchDocuments: () => Promise<void>;
   uploadDocument: (file: File) => Promise<void>;
+  uploadDocumentWithType: (file: File, documentType: string) => Promise<void>;
   analyzeJD: (jdText: string) => Promise<void>;
   optimizeResume: (templateId: string, jdId: string, evidenceIds: string[]) => Promise<void>;
   optimizeResumeATS: (resumeVersionId: string, jdId: string) => Promise<any>;
@@ -142,28 +75,26 @@ interface CISState {
   fetchPrepCards: (jdId: string, resumeVersionId: string) => Promise<void>;
   fetchJDsList: () => Promise<void>;
   fetchResumeVersionsList: () => Promise<void>;
+  fetchCoverLettersList: () => Promise<void>;
+  restoreResumeVersion: (id: string) => Promise<void>;
+  duplicateResumeVersion: (id: string) => Promise<void>;
+  branchResumeVersion: (id: string, branchName: string) => Promise<void>;
+  renameResumeVersion: (id: string, branchName: string, changeSummary?: string) => Promise<void>;
+  archiveResumeVersion: (id: string, archive: boolean) => Promise<void>;
+  deleteResumeVersion: (id: string) => Promise<void>;
+  saveCoverLetter: (generatedText: string, jdId?: string, branchName?: string, changeSummary?: string) => Promise<void>;
+  renameCoverLetter: (id: string, branchName: string, changeSummary?: string) => Promise<void>;
+  archiveCoverLetter: (id: string, archive: boolean) => Promise<void>;
+  deleteCoverLetter: (id: string) => Promise<void>;
+  resetDatabase: () => Promise<void>;
+  compareResumeVersions: (id1: string, id2: string) => Promise<string>;
   startInterview: (resumeId: string, jdId: string) => Promise<void>;
   submitInterviewResponse: (response: string) => Promise<void>;
   fetchInterviewReport: () => Promise<void>;
 }
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api";
+const API_URL = API_BASE;
 
-// Scoped fetch wrapper to inject NVIDIA NIM headers dynamically from localStorage
-const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-  const headers = new Headers(init?.headers);
-  if (typeof window !== "undefined") {
-    const key = localStorage.getItem("nvidia_api_key");
-    const mode = localStorage.getItem("gateway_mode");
-    if (key) headers.set("X-NVIDIA-API-Key", key);
-    if (mode) headers.set("X-AI-Gateway-Mode", mode);
-  }
-  const nativeFetch = typeof window !== "undefined" ? window.fetch : globalThis.fetch;
-  return nativeFetch(input, {
-    ...init,
-    headers,
-  });
-};
 
 export const useCISStore = create<CISState>((set, get) => ({
   documents: [],
@@ -243,7 +174,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   optimizeResume: async (templateId: string, jdId: string, evidenceIds: string[]) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/resume/generate`, {
+      const res = await apiFetch(`${API_URL}/resume/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -269,7 +200,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   optimizeResumeATS: async (resumeVersionId: string, jdId: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/ats/optimize`, {
+      const res = await apiFetch(`${API_URL}/ats/optimize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resume_version_id: resumeVersionId, jd_id: jdId }),
@@ -302,7 +233,7 @@ export const useCISStore = create<CISState>((set, get) => ({
 
   fetchDiff: async (resumeId: string) => {
     try {
-      const res = await fetch(`${API_URL}/resume/${resumeId}/diff`);
+      const res = await apiFetch(`${API_URL}/resume/${resumeId}/diff`);
       if (!res.ok) throw new Error("Failed to load diff");
       const data = await res.json();
       set((state) => ({
@@ -318,7 +249,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   fetchATSReport: async (resumeId: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/ats/${resumeId}`);
+      const res = await apiFetch(`${API_URL}/ats/${resumeId}`);
       if (!res.ok) throw new Error("Failed to calculate ATS compatibility");
       const data = await res.json();
       set({ atsReport: data, loading: false });
@@ -330,7 +261,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   startInterview: async (resumeId: string, jdId: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/interview/start`, {
+      const res = await apiFetch(`${API_URL}/interview/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resume_id: resumeId, jd_id: jdId }),
@@ -356,7 +287,7 @@ export const useCISStore = create<CISState>((set, get) => ({
     if (!session) return;
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/interview/respond`, {
+      const res = await apiFetch(`${API_URL}/interview/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -390,7 +321,7 @@ export const useCISStore = create<CISState>((set, get) => ({
     const session = get().interview;
     if (!session) return;
     try {
-      const res = await fetch(`${API_URL}/interview/report?session_id=${session.session_id}`);
+      const res = await apiFetch(`${API_URL}/interview/report?session_id=${session.session_id}`);
       if (!res.ok) throw new Error("Report download failed");
       const data = await res.json();
       set((state) => ({
@@ -406,7 +337,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   fetchHallucinations: async () => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/evidence/hallucinations`);
+      const res = await apiFetch(`${API_URL}/evidence/hallucinations`);
       if (!res.ok) throw new Error("Failed to fetch hallucination events");
       const data = await res.json();
       set({ hallucinations: data, loading: false });
@@ -418,7 +349,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   overrideHallucination: async (eventId: string, comments: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/evidence/override`, {
+      const res = await apiFetch(`${API_URL}/evidence/override`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_id: eventId, audit_comments: comments }),
@@ -433,7 +364,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   verifyClaim: async (text: string, evidenceIds: string[]) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/evidence/verify`, {
+      const res = await apiFetch(`${API_URL}/evidence/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text_snippet: text, selected_evidence_ids: evidenceIds }),
@@ -451,7 +382,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   fetchApplications: async () => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/applications`);
+      const res = await apiFetch(`${API_URL}/applications`);
       if (!res.ok) throw new Error("Failed to fetch applications");
       const data = await res.json();
       set({ applications: data, loading: false });
@@ -463,7 +394,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   createApplication: async (jdId: string, resumeVersionId: string, notes?: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/applications`, {
+      const res = await apiFetch(`${API_URL}/applications`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jd_id: jdId, resume_version_id: resumeVersionId, notes }),
@@ -479,7 +410,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   updateApplicationStatus: async (id: string, status: string, notes?: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/applications/${id}`, {
+      const res = await apiFetch(`${API_URL}/applications/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, notes }),
@@ -495,7 +426,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   deleteApplication: async (id: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/applications/${id}`, { method: "DELETE" });
+      const res = await apiFetch(`${API_URL}/applications/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete application");
       await get().fetchApplications();
     } catch (err: any) {
@@ -506,7 +437,7 @@ export const useCISStore = create<CISState>((set, get) => ({
 
   fetchInterviews: async (applicationId: string) => {
     try {
-      const res = await fetch(`${API_URL}/applications/${applicationId}/interviews`);
+      const res = await apiFetch(`${API_URL}/applications/${applicationId}/interviews`);
       if (!res.ok) throw new Error("Failed to fetch interviews");
       const data = await res.json();
       set((state) => ({
@@ -520,7 +451,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   scheduleInterview: async (applicationId: string, scheduledAt: string, roundNumber: number, interviewerInfo?: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/applications/${applicationId}/interviews`, {
+      const res = await apiFetch(`${API_URL}/applications/${applicationId}/interviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scheduled_at: scheduledAt, round_number: roundNumber, interviewer_info: interviewerInfo }),
@@ -537,7 +468,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   logOutcome: async (applicationId: string, outcomeType: string, feedback?: string, details?: any) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/applications/${applicationId}/outcome`, {
+      const res = await apiFetch(`${API_URL}/applications/${applicationId}/outcome`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ outcome_type: outcomeType, feedback, details }),
@@ -553,7 +484,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   generateCoverLetter: async (jdId: string, resumeVersionId: string, evidenceIds?: string[]) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/cover-letter/generate`, {
+      const res = await apiFetch(`${API_URL}/cover-letter/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jd_id: jdId, resume_version_id: resumeVersionId, selected_evidence_ids: evidenceIds || [] }),
@@ -574,7 +505,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   fetchPrepCards: async (jdId: string, resumeVersionId: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/interview/assistant/prep?jd_id=${jdId}&resume_version_id=${resumeVersionId}`);
+      const res = await apiFetch(`${API_URL}/interview/assistant/prep?jd_id=${jdId}&resume_version_id=${resumeVersionId}`);
       if (!res.ok) throw new Error("Failed to fetch prep cards");
       const data = await res.json();
       set({ prepCards: data, loading: false });
@@ -586,7 +517,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   fetchJDsList: async () => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/jd`);
+      const res = await apiFetch(`${API_URL}/jd`);
       if (!res.ok) throw new Error("Failed to fetch job descriptions");
       const data = await res.json();
       set({ jdsList: data, loading: false });
@@ -598,12 +529,217 @@ export const useCISStore = create<CISState>((set, get) => ({
   fetchResumeVersionsList: async () => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/resume/versions`);
+      const res = await apiFetch(`${API_URL}/resume/versions`);
       if (!res.ok) throw new Error("Failed to fetch resume versions");
       const data = await res.json();
       set({ resumeVersionsList: data, loading: false });
     } catch (err: any) {
       set({ error: err.message, loading: false });
+    }
+  },
+
+  coverLettersList: [],
+
+  uploadDocumentWithType: async (file: File, documentType: string) => {
+    set({ loading: true, error: null });
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await apiFetch(`${API_URL}/documents/scan?document_type=${documentType}`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      await get().fetchDocuments();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  fetchCoverLettersList: async () => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/cover-letter/versions`);
+      if (!res.ok) throw new Error("Failed to fetch cover letter versions");
+      const data = await res.json();
+      set({ coverLettersList: data, loading: false });
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  restoreResumeVersion: async (id: string) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/resume/versions/${id}/restore`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to restore version");
+      await get().fetchResumeVersionsList();
+      await get().fetchDocuments();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  duplicateResumeVersion: async (id: string) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/resume/versions/${id}/duplicate`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to duplicate version");
+      await get().fetchResumeVersionsList();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  branchResumeVersion: async (id: string, branchName: string) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/resume/versions/${id}/branch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch_name: branchName }),
+      });
+      if (!res.ok) throw new Error("Failed to branch version");
+      await get().fetchResumeVersionsList();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  renameResumeVersion: async (id: string, branchName: string, changeSummary?: string) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/resume/versions/${id}/rename`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch_name: branchName, change_summary: changeSummary }),
+      });
+      if (!res.ok) throw new Error("Failed to rename version");
+      await get().fetchResumeVersionsList();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  archiveResumeVersion: async (id: string, archive: boolean) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/resume/versions/${id}/archive?archive=${archive}`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to archive version");
+      await get().fetchResumeVersionsList();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  deleteResumeVersion: async (id: string) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/resume/versions/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete version");
+      await get().fetchResumeVersionsList();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  saveCoverLetter: async (generatedText: string, jdId?: string, branchName?: string, changeSummary?: string) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/cover-letter/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          generated_text: generatedText,
+          jd_id: jdId,
+          branch_name: branchName || "main",
+          change_summary: changeSummary || "Initial version",
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save cover letter");
+      await get().fetchCoverLettersList();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  renameCoverLetter: async (id: string, branchName: string, changeSummary?: string) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/cover-letter/versions/${id}/rename`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch_name: branchName, change_summary: changeSummary }),
+      });
+      if (!res.ok) throw new Error("Failed to rename cover letter");
+      await get().fetchCoverLettersList();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  archiveCoverLetter: async (id: string, archive: boolean) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/cover-letter/versions/${id}/archive?archive=${archive}`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to archive cover letter");
+      await get().fetchCoverLettersList();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  deleteCoverLetter: async (id: string) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/cover-letter/versions/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete cover letter");
+      await get().fetchCoverLettersList();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  resetDatabase: async () => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/cleanup/reset`, { method: "POST" });
+      if (!res.ok) throw new Error("Reset failed");
+      set({
+        documents: [],
+        jdAnalysis: null,
+        optimizedResume: null,
+        atsReport: null,
+        interview: null,
+        evidenceChunks: [],
+        hallucinations: [],
+        applications: [],
+        coverLetter: null,
+        prepCards: null,
+        jdsList: [],
+        resumeVersionsList: [],
+        coverLettersList: [],
+        loading: false,
+      });
+      await get().fetchDocuments();
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  compareResumeVersions: async (id1: string, id2: string) => {
+    try {
+      const res = await apiFetch(`${API_URL}/resume/compare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version_id_1: id1, version_id_2: id2 }),
+      });
+      if (!res.ok) throw new Error("Comparison failed");
+      const data = await res.json();
+      return data.diff;
+    } catch (err: any) {
+      console.error(err);
+      return "Error: Could not retrieve diff comparison.";
     }
   },
 }));

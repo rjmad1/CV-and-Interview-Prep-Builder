@@ -1,6 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, Integer, Boolean, Text, ForeignKey, DateTime, Date, Numeric, JSON, UUID
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from apps.api.src.database import Base
 
@@ -25,6 +26,7 @@ class Document(Base):
     document_type = Column(String(50), nullable=False)  # 'resume', 'verification', 'achievement'
     parsed_text = Column(Text)
     meta_data = Column("metadata", JSON().with_variant(JSONB, "postgresql"), default={}, nullable=False)
+    is_archived = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -100,6 +102,7 @@ class JobDescription(Base):
     title = Column(String(255), nullable=False)
     raw_text = Column(Text, nullable=False)
     url = Column(String(512))
+    is_archived = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 class SkillRequirement(Base):
@@ -177,7 +180,12 @@ class ResumeVersion(Base):
     generated_text = Column(Text, nullable=False)
     file_path = Column(String(512), nullable=False)
     evidence_bundle_id = Column(UUID(as_uuid=True), ForeignKey("evidence_bundles.id", ondelete="SET NULL"))
+    parent_version_id = Column(UUID(as_uuid=True), ForeignKey("resume_versions.id", ondelete="SET NULL"), nullable=True)
+    branch_name = Column(String(255), default="main", nullable=False)
+    change_summary = Column(Text)
+    is_archived = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    modified_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 class ResumeDiff(Base):
     __tablename__ = "resume_diffs"
@@ -249,4 +257,55 @@ class InterviewSessionState(Base):
     session_data = Column(JSON().with_variant(JSONB, "postgresql"), default={}, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class DeveloperRequest(Base):
+    __tablename__ = "developer_requests"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    request_type = Column(String(50), nullable=False)  # 'feature', 'bug', 'ux', 'tech_debt', 'performance', 'security'
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    url = Column(String(512))
+    screen_name = Column(String(255))
+    component_name = Column(String(255))
+    meta_data = Column("metadata", JSON().with_variant(JSONB, "postgresql"), default={}, nullable=False)
+    status = Column(String(50), default="pending", nullable=False)  # 'pending', 'analyzed', 'planned', 'implementing', 'verifying', 'completed', 'failed'
+    priority = Column(String(50), default="medium", nullable=False)  # 'low', 'medium', 'high', 'critical'
+    impact_assessment = Column(Text)
+    effort_estimate = Column(String(100))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    tasks = relationship("DeveloperTask", backref="request", cascade="all, delete-orphan", lazy="select")
+
+
+class DeveloperTask(Base):
+    __tablename__ = "developer_tasks"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    request_id = Column(UUID(as_uuid=True), ForeignKey("developer_requests.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    affected_layer = Column(String(100), nullable=False)  # 'frontend', 'backend', 'database', 'api_contract'
+    file_path = Column(String(512))
+    status = Column(String(50), default="todo", nullable=False)  # 'todo', 'in_progress', 'done'
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class CoverLetterVersion(Base):
+    __tablename__ = "cover_letter_versions"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    version_number = Column(Integer, nullable=False)
+    jd_id = Column(UUID(as_uuid=True), ForeignKey("job_descriptions.id", ondelete="SET NULL"))
+    generated_text = Column(Text, nullable=False)
+    file_path = Column(String(512), nullable=True)
+    parent_version_id = Column(UUID(as_uuid=True), ForeignKey("cover_letter_versions.id", ondelete="SET NULL"), nullable=True)
+    branch_name = Column(String(255), default="main", nullable=False)
+    change_summary = Column(Text)
+    is_archived = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    modified_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
 

@@ -1,6 +1,7 @@
+import re
 import uuid
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Any, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams, PointStruct, PayloadSchemaType
 from apps.api.src.config import settings
@@ -11,7 +12,6 @@ logger = logging.getLogger("cis-embedding-pipeline")
 
 class EmbeddingPipeline:
     def __init__(self, qdrant_url: Optional[str] = None):
-        self.qdrant_url = qdrant_url or settings.QDRURL if hasattr(settings, "QDRURL") else getattr(settings, "QDRANT_URL", "http://localhost:6333")
         self.qdrant_url = qdrant_url or settings.QDRANT_URL
         try:
             self.qdrant_client = QdrantClient(url=self.qdrant_url)
@@ -189,11 +189,10 @@ class EmbeddingPipeline:
         return db_chunks
 
 def re_split_paragraphs(text: str) -> List[str]:
-    # splits by double newlines or single newlines
-    import re
+    """Splits text by double or single newlines."""
     return re.split(r"\n\s*\n|\n", text)
 
+
 def re_split_sentences(text: str) -> List[str]:
-    # splits by sentence boundaries (dot, question, exclamation) followed by whitespace
-    import re
+    """Splits text at sentence boundaries (. ! ?) followed by whitespace."""
     return re.split(r"(?<=[.!?])\s+", text)
