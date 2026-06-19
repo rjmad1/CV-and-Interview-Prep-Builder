@@ -35,6 +35,9 @@ typecheck: ## Type-check backend
 security: ## Security scan (bandit)
 	cd apps/api && bandit -r src/ -ll -q
 
+validate-okf: ## Validate OKF frontmatter schema compliance
+	python scripts/validate_and_update_okf.py --only-validate
+
 # --- Lifecycle ---
 
 clean: ## Remove all __pycache__, .pyc, and build artifacts
@@ -50,6 +53,12 @@ reset: ## Reset database to clean state (dev only)
 install: ## Install all dependencies
 	cd apps/api && pip install -e ".[dev]"
 	cd apps/web && npm install
+
+setup-hooks: ## Set up local Git hooks
+	@echo "Installing git pre-commit hook..."
+	@python -c "import shutil; shutil.copy('git-hooks/pre-commit', '.git/hooks/pre-commit')"
+	@python -c "import os; os.chmod('.git/hooks/pre-commit', 0o755)"
+	@echo "Git hooks installed successfully."
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'

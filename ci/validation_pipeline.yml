@@ -17,8 +17,7 @@ jobs:
       - name: Validate Frontmatter
         run: |
           echo "Verifying Spec Frontmatter Schema Compliance..."
-          # Running validation script
-          python -c "import os, sys; print('Spec validation passed')"
+          python scripts/validate_and_update_okf.py --only-validate
 
   contract-validation:
     name: API & Contract Check

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Git pre-commit hook for validating and auto-updating OKF files.
+
+echo "Running OKF Compliance & Update Check..."
+python scripts/validate_and_update_okf.py --stage-changes
+exit_code=$?
+
+if [ $exit_code -ne 0 ]; then
+    echo "[-] OKF validation failed. Commit aborted."
+    exit $exit_code
+fi
+
+exit 0
