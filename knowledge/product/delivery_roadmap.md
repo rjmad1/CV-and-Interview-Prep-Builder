@@ -3,7 +3,7 @@ id: OKF-BUS-002
 type: business_capability
 title: Delivery Roadmap
 owner: Product Manager Agent
-last_updated: 2026-06-17
+last_updated: 2026-06-20
 depends_on: ["OKF-BUS-001"]
 tags: [roadmap, milestones, dependencies]
 ---

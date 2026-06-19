@@ -3,7 +3,7 @@ id: OKF-BUS-005
 type: business_capability
 title: Staffing Plan and SaaS Economics
 owner: Lead Architect Agent
-last_updated: 2026-06-17
+last_updated: 2026-06-20
 depends_on: ["OKF-BUS-001", "OKF-BUS-002", "OKF-BUS-003", "OKF-BUS-004"]
 tags: [staffing, economics, saas, cost-model]
 ---

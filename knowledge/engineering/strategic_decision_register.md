@@ -3,7 +3,7 @@ id: OKF-ENG-001
 type: engineering_standard
 title: Strategic Decision Register
 owner: Principal Architect Agent
-last_updated: 2026-06-17
+last_updated: 2026-06-20
 depends_on: ["OKF-BUS-001", "OKF-BUS-002", "OKF-BUS-003", "OKF-BUS-004"]
 tags: [adr, decisions, tradeoffs]
 ---

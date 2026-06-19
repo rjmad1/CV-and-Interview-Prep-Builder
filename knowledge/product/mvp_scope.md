@@ -3,7 +3,7 @@ id: OKF-BUS-003
 type: business_capability
 title: MVP Scope Optimization
 owner: Product Manager Agent
-last_updated: 2026-06-17
+last_updated: 2026-06-20
 depends_on: ["OKF-BUS-001", "OKF-BUS-002"]
 tags: [mvp, scope, prioritization]
 ---

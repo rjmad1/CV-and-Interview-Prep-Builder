@@ -3,7 +3,7 @@ id: OKF-BUS-001
 type: business_capability
 title: Master Software Factory Blueprint
 owner: Principal Architect Agent
-last_updated: 2026-06-17
+last_updated: 2026-06-20
 depends_on: []
 tags: [blueprint, governance, architecture, saas-readiness]
 ---

@@ -3,7 +3,7 @@ id: OKF-BUS-004
 type: business_capability
 title: Risk & Governance Blueprint
 owner: Security & Risk Lead Agent
-last_updated: 2026-06-17
+last_updated: 2026-06-20
 depends_on: ["OKF-BUS-001"]
 tags: [risk, governance, ai-safety, compliance]
 ---
