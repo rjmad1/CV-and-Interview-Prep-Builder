@@ -138,6 +138,9 @@ To ensure that the Transition from a single-user offline system to a multi-tenan
 2.  **Stateless Backends:** Keep the FastAPI service layer completely stateless. All persistent states must reside in the database or the local storage volume.
 3.  **Authentication Abstraction:** Wrap local mock security contexts in a security provider interface that can be swapped out for an OAuth2/OIDC/Auth0 provider.
 4.  **Storage Isolation:** Store user documents under a structured workspace folder path (`/workspaces/{user_id}/...`) to allow simple migration to S3 or secure cloud object storage.
+5.  **Asynchronous Operations:** Implement async database query boundaries using `AsyncSession` to prevent database network calls from blocking the API event loop.
+6.  **Hard Vector Isolation:** Structure chunk storage and search collections using Qdrant Named Partitions rather than soft metadata filters to ensure mathematically bounded query isolation.
+7.  **Unified Test Verification:** Wire all unit, integration, and E2E test suites into root workspace runner commands (`turbo run test`) to block compromised or regression-prone deploys.
 
 ---
 

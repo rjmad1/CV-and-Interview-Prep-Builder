@@ -34,6 +34,8 @@ Risks are categorized and prioritized based on **Likelihood (L)** and **Severity
 | **RSK-FID-03** | Quality | The system exports DOCX resumes with broken margins, misaligned tables, or incorrect font weights. | High | Medium | **Fidelity Regression Suite:** Render exported documents to virtual PDF layout trees and verify style XML nodes remain unchanged. |
 | **RSK-SEC-04** | Security | Unencrypted local SQLite database is accessed by other client applications on desktop or mobile. | Medium | High | **Data Volume Encryption:** Utilize OS-level sandbox directories and database-level encryption (e.g., SQLCipher) to prevent external file access. |
 | **RSK-OPS-05** | Operations | Workspace schemas break during PostgreSQL migration, leading to synchronization failure. | Low | Medium | **Dual-Write Sandbox Testing:** Validate all schema migrations against a local PostgreSQL test instance prior to deploying changes. |
+| **RSK-SEC-06** | Security | Cross-tenant data leakages in shared database or vector collection endpoints in SaaS mode. | Low | High | **JWT Bearer Context & Qdrant Partitions:** Enforce JWT token verification on all routes, bind user context to PostgreSQL RLS, and use native Qdrant Named Partitions. |
+| **RSK-OPS-07** | Operations | Blocked Event Loop threads in FastAPI due to synchronous database I/O operations under load. | Medium | Medium | **Asynchronous db Session Pools:** Build all query boundaries around `AsyncSession` execution contexts using `asyncpg`. |
 
 ---
 
@@ -41,6 +43,8 @@ Risks are categorized and prioritized based on **Likelihood (L)** and **Severity
 
 ### Evidence-Grounding Engine (Fact Checks)
 *   **Vector Distance Check:** Suggested modifications must be validated using semantic search. If a sentence has a cosine distance greater than `0.3` (using the target embedding model) from the nearest source text block, it must be flagged for manual evidence reference.
+*   **Fallback Lexical Auditing:** If cloud embedding endpoints fail, the engine must compute a minimum Jaccard index similarity >= 0.50 over key tokens, falling back to local `SentenceTransformers` instead of single-word lexical matching.
+*   **LangGraph Pipeline Checks:** Run validation tasks within the `interview_prep_graph` to verify candidate responses against historical CV inputs.
 *   **Automatic Claim Verification:** Prompt-level constraints must explicitly direct the model to cite matching source IDs:
     ```
     Every claim must end with a citation to the source document ID. 
