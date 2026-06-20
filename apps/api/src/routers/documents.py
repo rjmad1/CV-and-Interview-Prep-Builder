@@ -1,14 +1,13 @@
 """Documents router — scan, list, get document endpoints."""
-import io
 import logging
 import os
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Any, Dict, List
 
 from apps.api.src.config import settings
 from apps.api.src.database import get_db
@@ -29,7 +28,7 @@ class DocumentScanResponse(BaseModel):
     document_id: uuid.UUID
     filename: str
     status: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 class DocumentResponse(BaseModel):
@@ -38,7 +37,7 @@ class DocumentResponse(BaseModel):
     document_type: str
     parsed_text: str | None
     is_archived: bool
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 @router.post("/scan", response_model=DocumentScanResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -119,7 +118,7 @@ async def scan_document(
     )
 
 
-@router.get("", response_model=List[DocumentResponse])
+@router.get("", response_model=list[DocumentResponse])
 async def list_documents(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),

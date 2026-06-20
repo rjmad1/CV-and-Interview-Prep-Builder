@@ -4,25 +4,31 @@ import logging
 import os
 import re
 import uuid
-from typing import Any, List
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select, outerjoin
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.config import settings
 from apps.api.src.database import get_db
+from apps.api.src.graph.evidence_retrieval import evidence_retrieval_graph
 from apps.api.src.models import (
-    CoverLetterVersion, DocumentChunk, GenerationSession,
-    HallucinationEvent, JobDescription, ResumeVersion, SkillRequirement, User,
+    CoverLetterVersion,
+    DocumentChunk,
+    GenerationSession,
+    HallucinationEvent,
+    JobDescription,
+    ResumeVersion,
+    SkillRequirement,
+    User,
 )
 from apps.api.src.routers.deps import get_current_user
-from apps.api.src.graph.evidence_retrieval import evidence_retrieval_graph
 from apps.api.src.utils.ai_client import ai_gateway_client
-from apps.api.src.utils.similarity import cosine_similarity, jaccard_similarity
 from apps.api.src.utils.pdf_generator import generate_cover_letter_pdf
+from apps.api.src.utils.similarity import cosine_similarity, jaccard_similarity
 
 logger = logging.getLogger("cis-api")
 router = APIRouter(prefix="/api/cover-letter", tags=["Cover Letter"])
@@ -42,7 +48,7 @@ _BOILERPLATE_KEYWORDS = frozenset({
 class CoverLetterRequest(BaseModel):
     jd_id: uuid.UUID
     resume_version_id: uuid.UUID
-    selected_evidence_ids: List[uuid.UUID] = []
+    selected_evidence_ids: list[uuid.UUID] = []
 
 
 class CoverLetterResponse(BaseModel):
@@ -73,10 +79,10 @@ class CoverLetterVersionResponse(BaseModel):
 async def _gather_evidence(
     db: AsyncSession,
     user: "User",
-    selected_ids: List[uuid.UUID],
+    selected_ids: list[uuid.UUID],
     jd: "JobDescription",
     session_id: uuid.UUID,
-) -> List[str]:
+) -> list[str]:
     """Returns evidence texts from selected chunks or falls back to hybrid retrieval."""
     if selected_ids:
         result = await db.execute(
@@ -109,7 +115,7 @@ async def _validate_grounding(
     user: "User",
     session_id: uuid.UUID,
     cover_letter_text: str,
-    evidence_texts: List[str],
+    evidence_texts: list[str],
 ) -> None:
     """Raises HTTPException if any factual sentence fails grounding checks."""
     sentences = _SENTENCE_SPLIT_RE.split(cover_letter_text)
@@ -219,7 +225,7 @@ async def generate_cover_letter(
     return CoverLetterResponse(cover_letter=cover_letter_text)
 
 
-@router.get("/versions", response_model=List[CoverLetterVersionResponse])
+@router.get("/versions", response_model=list[CoverLetterVersionResponse])
 async def list_cover_letter_versions(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),

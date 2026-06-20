@@ -61,7 +61,7 @@ if ($ApiAlreadyRunning) {
     
     # Run Uvicorn in a background PowerShell process
     $ApiArguments = "-NoProfile -Command `"`$env:PYTHONPATH='$ProjectDir'; & '$ApiVenvPath' apps.api.src.main:app --port 8000 --host 127.0.0.1 *>`'$ApiLog`'`""
-    $ApiProcess = Start-Process -FilePath "powershell.exe" -ArgumentList $ApiArguments -WorkingDirectory $ProjectDir -WindowStyle Minimized -PassThru
+    $ApiProcess = Start-Process -FilePath "powershell.exe" -ArgumentList $ApiArguments -WorkingDirectory $ProjectDir -WindowStyle Hidden -PassThru
     
     if ($ApiProcess -eq $null) {
         Log-Message "Failed to start API process." "ERROR"
@@ -85,7 +85,7 @@ if ($GatewayAlreadyRunning) {
     
     # Run Uvicorn in a background PowerShell process for AI Gateway
     $GatewayArguments = "-NoProfile -Command `"`$env:PYTHONPATH='$ProjectDir'; & '$ApiVenvPath' ai_gateway.main:app --port 8001 --host 127.0.0.1 *>`'$GatewayLog`'`""
-    $GatewayProcess = Start-Process -FilePath "powershell.exe" -ArgumentList $GatewayArguments -WorkingDirectory $ProjectDir -WindowStyle Minimized -PassThru
+    $GatewayProcess = Start-Process -FilePath "powershell.exe" -ArgumentList $GatewayArguments -WorkingDirectory $ProjectDir -WindowStyle Hidden -PassThru
     
     if ($GatewayProcess -eq $null) {
         Log-Message "Failed to start AI Gateway process." "ERROR"
@@ -104,7 +104,7 @@ if ($WebAlreadyRunning) {
     
     # Run pnpm dev in a background PowerShell process
     $WebArguments = "-NoProfile -Command `"pnpm run dev *>`'$WebLog`'`""
-    $WebProcess = Start-Process -FilePath "powershell.exe" -ArgumentList $WebArguments -WorkingDirectory $ProjectDir -WindowStyle Minimized -PassThru
+    $WebProcess = Start-Process -FilePath "powershell.exe" -ArgumentList $WebArguments -WorkingDirectory $ProjectDir -WindowStyle Hidden -PassThru
     
     if ($WebProcess -eq $null) {
         Log-Message "Failed to start Web Frontend process." "ERROR"

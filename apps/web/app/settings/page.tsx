@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { apiFetch, API_BASE } from "../api/apiFetch";
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api";
+const API_URL = API_BASE;
 
 export default function SettingsPage() {
   const [gatewayMode, setGatewayMode] = useState("mock");
@@ -21,7 +22,7 @@ export default function SettingsPage() {
     // Fetch backend status
     const fetchStatus = async () => {
       try {
-        const res = await fetch(`${API_URL}/settings/status`);
+        const res = await apiFetch(`${API_URL}/settings/status`);
         if (res.ok) {
           const data = await res.json();
           setBackendConfigured(data.api_key_configured);
@@ -45,7 +46,7 @@ export default function SettingsPage() {
       localStorage.setItem("nvidia_api_key", apiKey);
 
       // Persist on local backend server
-      const res = await fetch(`${API_URL}/settings/save`, {
+      const res = await apiFetch(`${API_URL}/settings/save`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -76,7 +77,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div>
-        <h2 className="text-2xl font-black text-white">System Settings</h2>
+        <h1 className="text-2xl font-black text-white">System Settings</h1>
         <p className="text-xs text-slate-400 mt-1">Configure backend environment connections, model credentials, and local execution overrides.</p>
       </div>
 
@@ -86,10 +87,11 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <label className="text-xs font-semibold text-slate-200">AI Gateway Mode</label>
+              <label htmlFor="gateway-mode-select" className="text-xs font-semibold text-slate-200">AI Gateway Mode</label>
               <p className="text-[10px] text-slate-500 max-w-sm">Switch between mock response generation and direct live NVIDIA NIM connections.</p>
             </div>
             <select
+              id="gateway-mode-select"
               value={gatewayMode}
               onChange={(e) => setGatewayMode(e.target.value)}
               className="bg-slate-950 rounded-lg border border-slate-800 p-2 text-xs text-slate-300 focus:outline-none focus:border-purple-500/50"
@@ -101,7 +103,7 @@ export default function SettingsPage() {
 
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <label className="text-xs font-semibold text-slate-200">NVIDIA API Key</label>
+              <label htmlFor="nvidia-api-key-input" className="text-xs font-semibold text-slate-200">NVIDIA API Key</label>
               {backendConfigured && (
                 <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   Active in Server Environment
@@ -110,6 +112,7 @@ export default function SettingsPage() {
             </div>
             <input
               type="password"
+              id="nvidia-api-key-input"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={backendConfigured ? "••••••••••••••••••••••••••••" : "nvapi-..."}

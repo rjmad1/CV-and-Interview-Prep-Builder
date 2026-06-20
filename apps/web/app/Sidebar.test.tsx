@@ -11,9 +11,9 @@ describe("Sidebar component", () => {
     expect(screen.getAllByText("Studio")[0]).toBeInTheDocument();
     
     // Check that main link categories are present
-    expect(screen.getByText(/Dashboard/i)).toBeInTheDocument();
-    expect(screen.getByText(/Career Documents/i)).toBeInTheDocument();
-    expect(screen.getByText(/Job Description Analyzer/i)).toBeInTheDocument();
-    expect(screen.getByText(/Mock Interviews/i)).toBeInTheDocument();
+    expect(screen.getByText(/CV Vault/i)).toBeInTheDocument();
+    expect(screen.getByText(/CV Optimizer/i)).toBeInTheDocument();
+    expect(screen.getByText(/Application Tracker/i)).toBeInTheDocument();
+    expect(screen.getByText(/Interview Simulator/i)).toBeInTheDocument();
   });
 });

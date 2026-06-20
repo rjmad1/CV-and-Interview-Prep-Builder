@@ -1,7 +1,7 @@
 """Developer request and task orchestration router."""
 import logging
 import uuid
-from typing import Any, Dict, List
+from typing import Any
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, ConfigDict
@@ -27,7 +27,7 @@ class DeveloperRequestCreate(BaseModel):
     url: str | None = None
     screen_name: str | None = None
     component_name: str | None = None
-    meta_data: Dict[str, Any] = {}
+    meta_data: dict[str, Any] = {}
 
 
 class DeveloperTaskResponse(BaseModel):
@@ -56,7 +56,7 @@ class DeveloperRequestResponse(BaseModel):
     impact_assessment: str | None
     effort_estimate: str | None
     created_at: Any
-    tasks: List[DeveloperTaskResponse] = []
+    tasks: list[DeveloperTaskResponse] = []
 
 
 # --- Routes ---
@@ -128,7 +128,7 @@ async def create_developer_request(
     )
 
 
-@router.get("/requests", response_model=List[DeveloperRequestResponse])
+@router.get("/requests", response_model=list[DeveloperRequestResponse])
 async def list_developer_requests(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -154,7 +154,7 @@ async def list_developer_requests(
     ]
 
 
-@router.get("/tasks", response_model=List[DeveloperTaskResponse])
+@router.get("/tasks", response_model=list[DeveloperTaskResponse])
 async def list_developer_tasks(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),

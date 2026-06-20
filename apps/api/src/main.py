@@ -11,25 +11,24 @@ Responsibilities of this file (and ONLY this file):
 All route handlers, schemas, and business logic live in apps/api/src/routers/.
 """
 import logging
-
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from apps.api.src.config import settings
-from apps.api.src.utils.ai_client import ai_gateway_client, nvidia_api_key_ctx, ai_gateway_mode_ctx
+from apps.api.src.routers.app_settings import router as app_settings_router
+from apps.api.src.routers.applications import router as applications_router
+from apps.api.src.routers.ats import router as ats_router
+from apps.api.src.routers.cover_letter import router as cover_letter_router
 
 # Routers
 from apps.api.src.routers.documents import router as documents_router
-from apps.api.src.routers.jd import router as jd_router
-from apps.api.src.routers.resume import router as resume_router
-from apps.api.src.routers.ats import router as ats_router
-from apps.api.src.routers.interview import router as interview_router
-from apps.api.src.routers.applications import router as applications_router
-from apps.api.src.routers.cover_letter import router as cover_letter_router
 from apps.api.src.routers.evidence import router as evidence_router
+from apps.api.src.routers.interview import router as interview_router
+from apps.api.src.routers.jd import router as jd_router
 from apps.api.src.routers.orchestration import router as orchestration_router
-from apps.api.src.routers.app_settings import router as app_settings_router
+from apps.api.src.routers.resume import router as resume_router
+from apps.api.src.utils.ai_client import ai_gateway_client, ai_gateway_mode_ctx, nvidia_api_key_ctx
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cis-api")
@@ -39,8 +38,8 @@ logger = logging.getLogger("cis-api")
 async def lifespan(app: FastAPI):
     """Manage startup and shutdown: create DB tables, close httpx client."""
     # Create DB tables on startup
-    from apps.api.src.database import engine, Base
     from apps.api.src import models  # noqa: F401 — registers all models with Base
+    from apps.api.src.database import Base, engine
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables verified/created.")

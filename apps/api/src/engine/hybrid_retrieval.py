@@ -1,16 +1,18 @@
-import uuid
 import logging
-from typing import List, Dict, Any, Optional
-from sqlalchemy.orm import Session
+import uuid
+from typing import Any
+
 from qdrant_client import QdrantClient
+from sqlalchemy.orm import Session
+
 from apps.api.src.config import settings
-from apps.api.src.models import EvidenceBundle, TraceRecord, DocumentChunk
+from apps.api.src.models import DocumentChunk, EvidenceBundle, TraceRecord
 from apps.api.src.utils.ai_client import ai_gateway_client
 
 logger = logging.getLogger("cis-hybrid-retrieval")
 
 class HybridRetrieval:
-    def __init__(self, db: Session, qdrant_url: Optional[str] = None):
+    def __init__(self, db: Session, qdrant_url: str | None = None):
         self.db = db
         self.qdrant_url = qdrant_url or settings.QDRANT_URL
         try:
@@ -23,11 +25,11 @@ class HybridRetrieval:
             return uuid.UUID(val)
         return val
 
-    def sparse_search(self, user_id: Any, requirements: List[str], limit: int = 10) -> List[Dict[str, Any]]:
+    def sparse_search(self, user_id: Any, requirements: list[str], limit: int = 10) -> list[dict[str, Any]]:
         """Runs keyword lexical search across user's DocumentChunks in the SQL DB."""
         uid = self._to_uuid(user_id)
         matched_chunks = []
-        
+
         try:
             for req in requirements:
                 # Use ILIKE match query to find occurrences of requirements in chunk text
@@ -35,14 +37,14 @@ class HybridRetrieval:
                     DocumentChunk.user_id == uid,
                     DocumentChunk.chunk_text.ilike(f"%{req}%")
                 ).limit(limit).all()
-                
+
                 for chunk in chunks:
                     matched_chunks.append({
                         "chunk_id": str(chunk.id),
                         "text": chunk.chunk_text,
                         "score": 1.0  # Base occurrence weight
                     })
-            
+
             # Deduplicate and calculate query-term frequency weights
             unique_chunks = {}
             for chunk in matched_chunks:
@@ -51,10 +53,10 @@ class HybridRetrieval:
                     unique_chunks[cid] = chunk
                 else:
                     unique_chunks[cid]["score"] += 1.0
-                    
+
             sorted_chunks = sorted(unique_chunks.values(), key=lambda x: x["score"], reverse=True)
             results = sorted_chunks[:limit]
-            
+
             # Always supplement with ALL user chunks not already in results.
             # This ensures the anti-hallucination validator has the complete resume corpus
             # as grounding evidence, since generated bullets can reference content from any section.
@@ -71,7 +73,7 @@ class HybridRetrieval:
                         "score": 0.5  # Base supplemental score
                     })
                     seen_ids.add(cid)
-            
+
             logger.info(f"Sparse search returning {len(results)} chunks (keyword-matched + full corpus supplement)")
             return results
         except Exception as e:
@@ -79,7 +81,7 @@ class HybridRetrieval:
             return []
 
 
-    async def dense_search(self, user_id: Any, requirements: List[str], limit: int = 10) -> List[Dict[str, Any]]:
+    async def dense_search(self, user_id: Any, requirements: list[str], limit: int = 10) -> list[dict[str, Any]]:
         """Runs vector similarity dense search against Qdrant database."""
         uid = self._to_uuid(user_id)
         if not self.qdrant_client:
@@ -93,10 +95,10 @@ class HybridRetrieval:
         try:
             # 1. Embed query
             query_vector = (await ai_gateway_client.embed([query_text]))[0]
-            
+
             # 2. Search Qdrant with tenant filter
             from qdrant_client.http import models as qdrant_models
-            
+
             query_filter = qdrant_models.Filter(
                 must=[
                     qdrant_models.FieldCondition(
@@ -105,24 +107,25 @@ class HybridRetrieval:
                     )
                 ]
             )
-            
+
             # Tenant isolation validation check
             if not any(
-                isinstance(cond, qdrant_models.FieldCondition) 
-                and cond.key == "user_id" 
+                isinstance(cond, qdrant_models.FieldCondition)
+                and cond.key == "user_id"
                 and cond.match.value == str(uid)
                 for cond in query_filter.must
             ):
                 raise ValueError("Tenant isolation validation failed: query filter must specify a valid matching user_id")
-                
+
             search_response = self.qdrant_client.query_points(
                 collection_name="career_chunks",
                 query=query_vector,
                 query_filter=query_filter,
-                limit=limit
+                limit=limit,
+                shard_key_selector=str(uid)
             )
             search_results = search_response.points
-            
+
             dense_hits = []
             for hit in search_results:
                 dense_hits.append({
@@ -137,11 +140,11 @@ class HybridRetrieval:
 
     def reciprocal_rank_fusion(
         self,
-        sparse_results: List[Dict[str, Any]],
-        dense_results: List[Dict[str, Any]],
+        sparse_results: list[dict[str, Any]],
+        dense_results: list[dict[str, Any]],
         k: int = 60,
         limit: int = 15
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Merges sparse and dense search results using Reciprocal Rank Fusion (RRF)."""
         rrf_scores = {}
         chunk_map = {}
@@ -170,7 +173,7 @@ class HybridRetrieval:
         merged = sorted(merged, key=lambda x: x["rrf_score"], reverse=True)
         return merged[:limit]
 
-    async def rerank(self, requirements: List[str], merged_results: List[Dict[str, Any]], limit: int = 5) -> List[Dict[str, Any]]:
+    async def rerank(self, requirements: list[str], merged_results: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
         """Reranks candidates using Cross-Encoder Reranker via AI Gateway."""
         if not merged_results:
             return []
@@ -180,7 +183,7 @@ class HybridRetrieval:
 
         try:
             rerank_hits = await ai_gateway_client.rerank(query=query, passages=passages)
-            
+
             reranked = []
             for hit in rerank_hits:
                 idx = hit["index"]
@@ -198,11 +201,11 @@ class HybridRetrieval:
                 "score": item["rrf_score"]
             } for item in merged_results][:limit]
 
-    def compile_evidence_bundle(self, user_id: Any, session_id: Any, reranked_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def compile_evidence_bundle(self, user_id: Any, session_id: Any, reranked_results: list[dict[str, Any]]) -> dict[str, Any]:
         """Compiles the final audited evidence bundle and writes TraceRecords in SQL DB."""
         uid = self._to_uuid(user_id)
         sid = self._to_uuid(session_id)
-        
+
         try:
             # 1. Create EvidenceBundle
             bundle_id = uuid.uuid4()
@@ -219,11 +222,11 @@ class HybridRetrieval:
             evidence_items = []
             for rank, item in enumerate(reranked_results):
                 chunk_id = self._to_uuid(item["chunk_id"])
-                
+
                 # Normalize scores to [0.0, 1.0] scale
                 raw_score = float(item["score"])
                 confidence = min(max(raw_score if raw_score <= 1.0 else 0.95, 0.0), 1.0)
-                
+
                 trace = TraceRecord(
                     id=uuid.uuid4(),
                     bundle_id=bundle_id,
@@ -233,13 +236,13 @@ class HybridRetrieval:
                     mapping_reason=f"Retrieved rank {rank + 1} matching JD keywords."
                 )
                 self.db.add(trace)
-                
+
                 evidence_items.append({
                     "chunk_id": item["chunk_id"],
                     "confidence": confidence,
                     "text_snippet": item["text"]
                 })
-            
+
             self.db.commit()
             return {
                 "bundle_id": str(bundle_id),

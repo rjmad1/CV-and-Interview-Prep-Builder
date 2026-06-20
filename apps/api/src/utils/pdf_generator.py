@@ -1,9 +1,9 @@
-import os
 from docx import Document
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
+
 
 def convert_docx_to_pdf(docx_path: str, pdf_path: str):
     """
@@ -11,7 +11,7 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str):
     Preserves structural formatting (headings, bullet points, education, skills).
     """
     doc = Document(docx_path)
-    
+
     # Setup document
     pdf_doc = SimpleDocTemplate(
         pdf_path,
@@ -21,9 +21,9 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str):
         topMargin=54,
         bottomMargin=54
     )
-    
+
     styles = getSampleStyleSheet()
-    
+
     # Custom styles matching professional aesthetics
     title_style = ParagraphStyle(
         'ResumeTitle',
@@ -35,7 +35,7 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str):
         alignment=1,  # Centered
         spaceAfter=6
     )
-    
+
     contact_style = ParagraphStyle(
         'ResumeContact',
         parent=styles['Normal'],
@@ -46,7 +46,7 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str):
         alignment=1,  # Centered
         spaceAfter=15
     )
-    
+
     heading_style = ParagraphStyle(
         'ResumeHeading',
         parent=styles['Heading2'],
@@ -58,7 +58,7 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str):
         spaceAfter=4,
         keepWithNext=True
     )
-    
+
     body_style = ParagraphStyle(
         'ResumeBody',
         parent=styles['Normal'],
@@ -68,7 +68,7 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str):
         textColor=colors.HexColor('#2A2B30'),
         spaceAfter=6
     )
-    
+
     bullet_style = ParagraphStyle(
         'ResumeBullet',
         parent=styles['Normal'],
@@ -80,15 +80,15 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str):
         firstLineIndent=-10,
         spaceAfter=4
     )
-    
+
     story = []
     first_heading_found = False
-    
+
     for i, p in enumerate(doc.paragraphs):
         text = p.text.strip()
         if not text:
             continue
-            
+
         # Determine paragraph role based on index and styles
         if i == 0 and len(text) < 40 and not p.style.name.startswith("Heading"):
             story.append(Paragraph(text, title_style))
@@ -107,7 +107,7 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str):
                 story.append(Paragraph(f"&bull; {bullet_text}", bullet_style))
             else:
                 story.append(Paragraph(text, body_style))
-                
+
     pdf_doc.build(story)
 
 def generate_cover_letter_pdf(text: str, pdf_path: str):
@@ -122,9 +122,9 @@ def generate_cover_letter_pdf(text: str, pdf_path: str):
         topMargin=54,
         bottomMargin=54
     )
-    
+
     styles = getSampleStyleSheet()
-    
+
     body_style = ParagraphStyle(
         'CoverLetterBody',
         parent=styles['Normal'],
@@ -134,9 +134,9 @@ def generate_cover_letter_pdf(text: str, pdf_path: str):
         textColor=colors.HexColor('#2A2B30'),
         spaceAfter=10
     )
-    
+
     story = []
-    
+
     paragraphs = text.split("\n")
     for p_text in paragraphs:
         p_text = p_text.strip()
@@ -144,5 +144,5 @@ def generate_cover_letter_pdf(text: str, pdf_path: str):
             story.append(Paragraph(p_text, body_style))
         else:
             story.append(Spacer(1, 6))
-            
+
     pdf_doc.build(story)

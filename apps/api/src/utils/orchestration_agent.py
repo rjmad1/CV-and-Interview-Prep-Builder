@@ -1,6 +1,7 @@
 import json
 import logging
-from typing import Dict, Any
+from typing import Any
+
 from apps.api.src.utils.ai_client import ai_gateway_client
 
 logger = logging.getLogger("cis-orchestration-agent")
@@ -9,7 +10,7 @@ class OrchestrationAgent:
     def __init__(self):
         pass
 
-    async def analyze_request(self, title: str, description: str, request_type: str, url: str = None, screen_name: str = None) -> Dict[str, Any]:
+    async def analyze_request(self, title: str, description: str, request_type: str, url: str = None, screen_name: str = None) -> dict[str, Any]:
         """
         Analyzes a developer request (feature/bug) using NVIDIA NIM LLM.
         Falls back to a structured deterministic analysis in mock mode.
@@ -60,13 +61,13 @@ class OrchestrationAgent:
             if cleaned.endswith("```"):
                 cleaned = cleaned.rsplit("```", 1)[0]
             cleaned = cleaned.strip()
-            
+
             return json.loads(cleaned)
         except Exception as e:
             logger.error(f"Failed to analyze request with NIM: {e}. Falling back to mock generator.")
             return self._generate_mock_analysis(title, description, request_type, url, screen_name)
 
-    def _generate_mock_analysis(self, title: str, description: str, request_type: str, url: str = None, screen_name: str = None) -> Dict[str, Any]:
+    def _generate_mock_analysis(self, title: str, description: str, request_type: str, url: str = None, screen_name: str = None) -> dict[str, Any]:
         """Generates a high-fidelity mock analysis for the request."""
         desc_lower = description.lower()
         title_lower = title.lower()

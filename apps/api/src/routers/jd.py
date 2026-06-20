@@ -6,16 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
 
 from apps.api.src.database import get_db
+from apps.api.src.graph.evidence_retrieval import evidence_retrieval_graph
+from apps.api.src.graph.jd_intelligence import jd_intelligence_graph
 from apps.api.src.models import (
-    DocumentChunk, EvidenceBundle, GapAnalysis, GenerationSession,
-    JobDescription, SkillRequirement, TraceRecord, User,
+    GapAnalysis,
+    GenerationSession,
+    JobDescription,
+    SkillRequirement,
+    User,
 )
 from apps.api.src.routers.deps import get_current_user
-from apps.api.src.graph.jd_intelligence import jd_intelligence_graph
-from apps.api.src.graph.evidence_retrieval import evidence_retrieval_graph
 
 logger = logging.getLogger("cis-api")
 router = APIRouter(prefix="/api", tags=["Job Descriptions & Evidence"])
@@ -33,9 +35,9 @@ class SkillGap(BaseModel):
 
 class JDAnalysisResponse(BaseModel):
     jd_id: uuid.UUID
-    extracted_skills: List[str]
-    keywords: List[str]
-    gap_analysis: List[SkillGap]
+    extracted_skills: list[str]
+    keywords: list[str]
+    gap_analysis: list[SkillGap]
 
 
 class JDListResponse(BaseModel):
@@ -97,7 +99,7 @@ async def analyze_jd(
     )
 
 
-@router.get("/jd", response_model=List[JDListResponse])
+@router.get("/jd", response_model=list[JDListResponse])
 async def list_jds(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -157,7 +159,7 @@ async def get_jd_analysis(
     )
 
 
-@router.get("/evidence/retrieve", response_model=List[EvidenceItem])
+@router.get("/evidence/retrieve", response_model=list[EvidenceItem])
 async def retrieve_evidence(
     jd_id: uuid.UUID = Query(..., description="UUID of the analyzed Job Description"),
     db: AsyncSession = Depends(get_db),

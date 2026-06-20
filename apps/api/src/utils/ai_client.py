@@ -1,7 +1,9 @@
-import httpx
-from typing import List, Dict, Any
-from apps.api.src.config import settings
 from contextvars import ContextVar
+from typing import Any
+
+import httpx
+
+from apps.api.src.config import settings
 
 nvidia_api_key_ctx: ContextVar[str] = ContextVar("nvidia_api_key", default="")
 ai_gateway_mode_ctx: ContextVar[str] = ContextVar("ai_gateway_mode", default="")
@@ -14,7 +16,7 @@ class AIGatewayClient:
     async def close(self):
         await self.client.aclose()
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         headers = {}
         api_key = nvidia_api_key_ctx.get()
         mode = ai_gateway_mode_ctx.get()
@@ -24,7 +26,7 @@ class AIGatewayClient:
             headers["X-AI-Gateway-Mode"] = mode
         return headers
 
-    async def generate(self, model: str, messages: List[Dict[str, str]], temperature: float = 0.2, max_tokens: int = 1024) -> str:
+    async def generate(self, model: str, messages: list[dict[str, str]], temperature: float = 0.2, max_tokens: int = 1024) -> str:
         url = f"{self.base_url}/generate"
         payload = {
             "model": model,
@@ -36,14 +38,14 @@ class AIGatewayClient:
         response.raise_for_status()
         return response.json()["content"]
 
-    async def embed(self, texts: List[str]) -> List[List[float]]:
+    async def embed(self, texts: list[str]) -> list[list[float]]:
         url = f"{self.base_url}/embed"
         payload = {"texts": texts}
         response = await self.client.post(url, json=payload, headers=self._get_headers())
         response.raise_for_status()
         return response.json()["embeddings"]
 
-    async def rerank(self, query: str, passages: List[str]) -> List[Dict[str, Any]]:
+    async def rerank(self, query: str, passages: list[str]) -> list[dict[str, Any]]:
         url = f"{self.base_url}/rerank"
         payload = {"query": query, "passages": passages}
         response = await self.client.post(url, json=payload, headers=self._get_headers())

@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { apiFetch, API_BASE } from "../api/apiFetch";
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api";
+const API_URL = API_BASE;
 
 export default function OnboardingModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -21,7 +22,7 @@ export default function OnboardingModal() {
 
       // 2. Fallback to check backend status
       try {
-        const res = await fetch(`${API_URL}/settings/status`);
+        const res = await apiFetch(`${API_URL}/settings/status`);
         if (res.ok) {
           const data = await res.json();
           if (data.api_key_configured) {
@@ -58,7 +59,7 @@ export default function OnboardingModal() {
       localStorage.setItem("onboarding_completed", "true");
 
       // Save to local server
-      const res = await fetch(`${API_URL}/settings/save`, {
+      const res = await apiFetch(`${API_URL}/settings/save`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -155,7 +156,7 @@ export default function OnboardingModal() {
           {mode === "direct" && (
             <div className="space-y-2 animate-slide-down">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-semibold text-slate-200">NVIDIA API Key</label>
+                <label htmlFor="onboarding-nvidia-api-key" className="text-xs font-semibold text-slate-200">NVIDIA API Key</label>
                 <a 
                   href="https://build.nvidia.com/" 
                   target="_blank" 
@@ -167,6 +168,7 @@ export default function OnboardingModal() {
               </div>
               <input 
                 type="password"
+                id="onboarding-nvidia-api-key"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="nvapi-..."

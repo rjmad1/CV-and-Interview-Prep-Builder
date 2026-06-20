@@ -1,12 +1,13 @@
 import logging
 import re
-from typing import Dict, List, Any
+from typing import Any
+
 from apps.api.src.utils.ai_client import ai_gateway_client
 
 logger = logging.getLogger("cis-ats-scorer")
 
 class ATSScorer:
-    async def compute_score(self, resume_text: str, jd_text: str, jd_keywords: List[str]) -> Dict[str, Any]:
+    async def compute_score(self, resume_text: str, jd_text: str, jd_keywords: list[str]) -> dict[str, Any]:
         """
         Calculates ATS scores and provides explainability analysis:
         - Keyword Coverage (40%)
@@ -14,11 +15,11 @@ class ATSScorer:
         - Readability / Structure (20%)
         """
         logger.info("Computing ATS explainability score metrics...")
-        
+
         # 1. Keyword Coverage
         matched_keywords = []
         missing_keywords = []
-        
+
         resume_lower = resume_text.lower()
         for keyword in jd_keywords:
             kw_clean = keyword.lower().strip()
@@ -28,9 +29,9 @@ class ATSScorer:
                 matched_keywords.append(keyword)
             else:
                 missing_keywords.append(keyword)
-                
+
         kw_coverage_ratio = len(matched_keywords) / len(jd_keywords) if jd_keywords else 1.0
-        
+
         # 2. Semantic Match
         try:
             # Embed both documents and calculate cosine similarity
@@ -45,10 +46,10 @@ class ATSScorer:
         except Exception as e:
             logger.error(f"Failed to calculate semantic match: {e}")
             semantic_score = 0.75  # Fallback
-            
+
         # 3. Readability & Structure Analysis
         readability_issues = []
-        
+
         # Check for passive voice
         passive_patterns = [
             r"\b(was|were|been|is|are|am)\b\s+(\w+ed)\b",
@@ -60,10 +61,10 @@ class ATSScorer:
         for pat in passive_patterns:
             matches = re.findall(pat, resume_lower)
             passive_matches += len(matches)
-            
+
         if passive_matches > 3:
             readability_issues.append(f"Detected {passive_matches} instances of passive voice. Use active verbs (e.g. 'Engineered' instead of 'Was engineered').")
-            
+
         # Check for long sentences (> 25 words)
         sentences = re.split(r"[.!?]+", resume_text)
         long_sentences = 0
@@ -71,30 +72,30 @@ class ATSScorer:
             words = sent.split()
             if len(words) > 25:
                 long_sentences += 1
-                
+
         if long_sentences > 2:
             readability_issues.append(f"Found {long_sentences} sentences containing more than 25 words. Keep bullet points concise and punchy.")
-            
+
         # Check for buzzword overload (clichés)
         buzzwords = ["synergy", "dynamic", "go-getter", "team player", "detail-oriented", "thought leader"]
         found_buzz = [b for b in buzzwords if b in resume_lower]
         if found_buzz:
             readability_issues.append(f"Reduce usage of generic buzzwords: {', '.join(found_buzz)}.")
-            
+
         # Calculate readability metric
         readability_base = 100.0 - (len(readability_issues) * 10.0)
         readability_score = max(min(readability_base, 100.0), 30.0) / 100.0
-        
+
         # Calculate final weighted score
         final_ats_score = (kw_coverage_ratio * 40.0) + (max(semantic_score, 0.0) * 40.0) + (readability_score * 20.0)
-        
+
         # Build explanation rationale
         rationale = (
             f"Your resume matches {len(matched_keywords)} out of {len(jd_keywords)} critical keywords. "
             f"The semantic compatibility score is {semantic_score * 100:.1f}%, indicating a high degree of role alignment. "
             f"We identified {len(readability_issues)} formatting or readability issues that could be improved."
         )
-        
+
         return {
             "ats_score": round(final_ats_score, 1),
             "keyword_coverage": round(kw_coverage_ratio, 2),

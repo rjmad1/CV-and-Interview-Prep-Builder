@@ -9,22 +9,20 @@ owned by the FastAPI route handler; graph nodes do not have access to it.
 This is a deliberate design constraint (ponytail: if LangGraph adds native async
 support, refactor to pass session state through the graph context instead).
 """
+import difflib
 import logging
 import os
 import uuid
-import difflib
-import re
-from typing import Dict, List, Any, TypedDict
+from typing import Any, TypedDict
 
-import numpy as np
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
 from apps.api.src.config import settings
 from apps.api.src.database import SessionLocal
-from apps.api.src.models import ResumeVersion, ResumeDiff, HallucinationEvent
+from apps.api.src.engine.docx_engine import DocxEngine
+from apps.api.src.models import HallucinationEvent, ResumeDiff, ResumeVersion
 from apps.api.src.utils.ai_client import ai_gateway_client
 from apps.api.src.utils.similarity import cosine_similarity, keyword_coverage
-from apps.api.src.engine.docx_engine import DocxEngine
 
 logger = logging.getLogger("cis-graph-resume")
 
@@ -43,8 +41,8 @@ class ResumeState(TypedDict):
     resume_id: str
     template_id: str
     jd_id: str
-    evidence_bundle: Dict[str, Any]
-    target_sections: List[str]
+    evidence_bundle: dict[str, Any]
+    target_sections: list[str]
     original_text: str
     optimized_text: str
     validation_status: str  # 'passed' | 'failed'
@@ -55,13 +53,13 @@ class ResumeState(TypedDict):
 
 # --- Node Implementations ---
 
-def select_sections(state: ResumeState) -> Dict[str, Any]:
+def select_sections(state: ResumeState) -> dict[str, Any]:
     """Identifies CV sections needing tailoring based on job description gaps."""
     logger.info("Selecting target resume sections for optimization...")
     return {"target_sections": ["Professional Experience", "Skills Summary"], "status": "sections_selected"}
 
 
-async def optimize_bullets(state: ResumeState) -> Dict[str, Any]:
+async def optimize_bullets(state: ResumeState) -> dict[str, Any]:
     """Refines section text incorporating evidence and keywords."""
     logger.info("Optimizing experience bullets via LLM...")
     evidence_items = state["evidence_bundle"].get("items", [])
@@ -95,7 +93,7 @@ async def optimize_bullets(state: ResumeState) -> Dict[str, Any]:
     return {"optimized_text": optimized.strip(), "status": "optimized"}
 
 
-async def validate_against_evidence(state: ResumeState) -> Dict[str, Any]:
+async def validate_against_evidence(state: ResumeState) -> dict[str, Any]:
     """Ensures generated claims are grounded in the evidence bundle (anti-hallucination)."""
     logger.info("Validating generated statements against evidence (Anti-Hallucination Policy)...")
     optimized_text = state["optimized_text"]
@@ -173,7 +171,7 @@ async def validate_against_evidence(state: ResumeState) -> Dict[str, Any]:
     return {"validation_status": "passed", "status": "validated"}
 
 
-def generate_version_diff(state: ResumeState) -> Dict[str, Any]:
+def generate_version_diff(state: ResumeState) -> dict[str, Any]:
     """Generates unified diff between original and optimized resume text."""
     logger.info("Generating version control diff...")
     diff = difflib.unified_diff(
@@ -186,7 +184,7 @@ def generate_version_diff(state: ResumeState) -> Dict[str, Any]:
     return {"version_diff": "\n".join(diff), "status": "diffed"}
 
 
-def export_docx(state: ResumeState) -> Dict[str, Any]:
+def export_docx(state: ResumeState) -> dict[str, Any]:
     """Merges optimizations back into DOCX layout and persists to DB (sync session)."""
     logger.info("Running layout preservation merge engine and exporting DOCX...")
     user_id = state["user_id"]

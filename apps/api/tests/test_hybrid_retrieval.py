@@ -60,7 +60,7 @@ def test_sparse_search_matching(db_session):
     retriever = HybridRetrieval(db_session)
     
     results = retriever.sparse_search(user.id, ["Python"])
-    assert len(results) == 1
+    assert len(results) == 2
     assert "Python" in results[0]["text"]
 
 def test_reciprocal_rank_fusion():

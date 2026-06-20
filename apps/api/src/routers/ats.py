@@ -3,20 +3,25 @@ import difflib
 import logging
 import os
 import uuid
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Any, Dict, List
 
 from apps.api.src.config import settings
 from apps.api.src.database import get_db
+from apps.api.src.engine.ats_scorer import ATSScorer
 from apps.api.src.models import (
-    ATSReport, JobDescription, KeywordAnalysis, ResumeDiff, ResumeVersion, User,
+    ATSReport,
+    JobDescription,
+    KeywordAnalysis,
+    ResumeDiff,
+    ResumeVersion,
+    User,
 )
 from apps.api.src.routers.deps import get_current_user
-from apps.api.src.engine.ats_scorer import ATSScorer
 
 logger = logging.getLogger("cis-api")
 router = APIRouter(prefix="/api/ats", tags=["ATS"])
@@ -27,7 +32,7 @@ class ATSReportResponse(BaseModel):
     keyword_coverage: float
     semantic_match: float
     readability_score: float
-    detailed_findings: Dict[str, Any]
+    detailed_findings: dict[str, Any]
 
 
 class ATSOptimizeRequest(BaseModel):
@@ -41,7 +46,7 @@ class ATSOptimizeResponse(BaseModel):
     version: int
     initial_score: float
     new_score: float
-    weaved_keywords: List[str]
+    weaved_keywords: list[str]
     message: str
 
 
@@ -147,7 +152,8 @@ async def optimize_resume_ats(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Count existing versions
-    from sqlalchemy import func, select as sa_select
+    from sqlalchemy import func
+    from sqlalchemy import select as sa_select
     count_res = await db.execute(
         sa_select(func.count(ResumeVersion.id)).filter(
             ResumeVersion.user_id == user.id,

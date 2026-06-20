@@ -1,9 +1,10 @@
+import logging
 import re
 import uuid
-import logging
-from typing import List, Any, Optional
+
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams, PointStruct, PayloadSchemaType
+from qdrant_client.http.models import Distance, PayloadSchemaType, PointStruct, ShardingMethod, VectorParams
+
 from apps.api.src.config import settings
 from apps.api.src.models import DocumentChunk
 from apps.api.src.utils.ai_client import ai_gateway_client
@@ -11,7 +12,7 @@ from apps.api.src.utils.ai_client import ai_gateway_client
 logger = logging.getLogger("cis-embedding-pipeline")
 
 class EmbeddingPipeline:
-    def __init__(self, qdrant_url: Optional[str] = None):
+    def __init__(self, qdrant_url: str | None = None):
         self.qdrant_url = qdrant_url or settings.QDRANT_URL
         try:
             self.qdrant_client = QdrantClient(url=self.qdrant_url)
@@ -27,13 +28,27 @@ class EmbeddingPipeline:
             # Check if collection exists, if not create it
             collections = self.qdrant_client.get_collections().collections
             collection_names = [c.name for c in collections]
+
+            # If the collection exists but does not have CUSTOM sharding, recreate it
+            if collection_name in collection_names:
+                try:
+                    info = self.qdrant_client.get_collection(collection_name)
+                    current_sharding = getattr(info.config.params, "sharding_method", None)
+                    if current_sharding != ShardingMethod.CUSTOM:
+                        logger.warning(f"Recreating collection {collection_name} to migrate to CUSTOM sharding method (Named Partitions).")
+                        self.qdrant_client.delete_collection(collection_name)
+                        collection_names.remove(collection_name)
+                except Exception as check_err:
+                    logger.warning(f"Failed to inspect sharding configuration for Qdrant collection: {check_err}")
+
             if collection_name not in collection_names:
                 self.qdrant_client.create_collection(
                     collection_name=collection_name,
                     vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
+                    sharding_method=ShardingMethod.CUSTOM,
                 )
-                logger.info(f"Created Qdrant collection: {collection_name}")
-                
+                logger.info(f"Created Qdrant collection with CUSTOM sharding: {collection_name}")
+
                 try:
                     self.qdrant_client.create_payload_index(
                         collection_name=collection_name,
@@ -44,7 +59,7 @@ class EmbeddingPipeline:
                 except Exception as index_err:
                     logger.warning(f"Failed to create Qdrant payload index on user_id: {index_err}")
 
-    def chunk_text(self, text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
+    def chunk_text(self, text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]:
         """
         Splits text into chunks, respecting paragraph boundaries (\n\n or \n) and sentence boundaries,
         while maintaining target chunk sizes.
@@ -98,7 +113,7 @@ class EmbeddingPipeline:
 
         return chunks
 
-    async def generate_embeddings(self, chunks: List[str]) -> List[List[float]]:
+    async def generate_embeddings(self, chunks: list[str]) -> list[list[float]]:
         """Generates embeddings via AI Gateway."""
         if not chunks:
             return []
@@ -118,7 +133,7 @@ class EmbeddingPipeline:
         text: str,
         chunk_size: int = 500,
         overlap: int = 50
-    ) -> List[DocumentChunk]:
+    ) -> list[DocumentChunk]:
         """
         Runs the full ingestion pipeline:
         1. Chunks parsed text
@@ -128,13 +143,13 @@ class EmbeddingPipeline:
         """
         chunks_text = self.chunk_text(text, chunk_size, overlap)
         embeddings = await self.generate_embeddings(chunks_text)
-        
+
         db_chunks = []
         qdrant_points = []
-        
-        for idx, (chunk_text, vector) in enumerate(zip(chunks_text, embeddings)):
+
+        for idx, (chunk_text, vector) in enumerate(zip(chunks_text, embeddings, strict=False)):
             chunk_id = uuid.uuid4()
-            
+
             # 1. SQL Database Chunk
             db_chunk = DocumentChunk(
                 id=chunk_id,
@@ -147,7 +162,7 @@ class EmbeddingPipeline:
             )
             db_session.add(db_chunk)
             db_chunks.append(db_chunk)
-            
+
             # 2. Qdrant Point
             if self.qdrant_client:
                 qdrant_points.append(
@@ -162,10 +177,10 @@ class EmbeddingPipeline:
                         }
                     )
                 )
-        
+
         # Commit to SQL DB
         db_session.commit()
-        
+
         # Tenant isolation validation check
         if qdrant_points:
             for pt in qdrant_points:
@@ -174,25 +189,37 @@ class EmbeddingPipeline:
                         f"Tenant isolation validation failed: point payload contains incorrect or missing user_id. "
                         f"Expected: {user_id}, got: {pt.payload.get('user_id')}"
                     )
-        
-        # Upsert to Qdrant
+
+        # Upsert to Qdrant with custom shard key routing
         if self.qdrant_client and qdrant_points:
             try:
+                # Enforce creating the shard key for this tenant first
+                try:
+                    self.qdrant_client.create_shard_key(
+                        collection_name="career_chunks",
+                        shard_key=str(user_id)
+                    )
+                    logger.info(f"Ensured shard key created for user: {user_id}")
+                except Exception as shard_err:
+                    # Ignore if it already exists
+                    logger.debug(f"Shard key creation note: {shard_err}")
+
                 self.qdrant_client.upsert(
                     collection_name="career_chunks",
-                    points=qdrant_points
+                    points=qdrant_points,
+                    shard_key_selector=str(user_id)
                 )
-                logger.info(f"Successfully upserted {len(qdrant_points)} points to Qdrant.")
+                logger.info(f"Successfully upserted {len(qdrant_points)} points to Qdrant with shard key {user_id}.")
             except Exception as e:
                 logger.error(f"Failed to upsert points to Qdrant: {e}")
-                
+
         return db_chunks
 
-def re_split_paragraphs(text: str) -> List[str]:
+def re_split_paragraphs(text: str) -> list[str]:
     """Splits text by double or single newlines."""
     return re.split(r"\n\s*\n|\n", text)
 
 
-def re_split_sentences(text: str) -> List[str]:
+def re_split_sentences(text: str) -> list[str]:
     """Splits text at sentence boundaries (. ! ?) followed by whitespace."""
     return re.split(r"(?<=[.!?])\s+", text)

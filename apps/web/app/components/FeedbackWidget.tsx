@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { MessageSquare, Send, X, Bug, ShieldAlert, Zap, Layout, HelpCircle } from "lucide-react";
+import { apiFetch, API_BASE } from "../api/apiFetch";
 
 export default function FeedbackWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -60,8 +61,7 @@ export default function FeedbackWidget() {
     };
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const res = await window.fetch(`${baseUrl}/api/orchestration/requests`, {
+      const res = await apiFetch(`${API_BASE}/orchestration/requests`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -155,9 +155,10 @@ export default function FeedbackWidget() {
 
               {/* Title */}
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Issue Title / Request Summary *</label>
+                <label htmlFor="feedback-title-input" className="block text-xs font-medium text-slate-400 mb-1">Issue Title / Request Summary *</label>
                 <input
                   type="text"
+                  id="feedback-title-input"
                   required
                   placeholder="e.g. Remove hardcoded JWT secret"
                   value={title}
@@ -168,8 +169,9 @@ export default function FeedbackWidget() {
 
               {/* Description */}
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Detailed Description *</label>
+                <label htmlFor="feedback-description-textarea" className="block text-xs font-medium text-slate-400 mb-1">Detailed Description *</label>
                 <textarea
+                  id="feedback-description-textarea"
                   required
                   rows={3}
                   placeholder="Provide context, reproduction steps, or expected behaviors..."
@@ -183,9 +185,10 @@ export default function FeedbackWidget() {
               <div className="grid grid-cols-2 gap-3">
                 {/* Request Type */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Type</label>
+                  <label htmlFor="feedback-type-select" className="block text-xs font-medium text-slate-400 mb-1">Type</label>
                   <div className="relative">
                     <select
+                      id="feedback-type-select"
                       value={type}
                       onChange={(e) => setType(e.target.value)}
                       className="w-full bg-slate-950/60 border border-slate-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 text-slate-350 text-xs rounded-xl pl-8 pr-3 py-2.5 outline-none appearance-none cursor-pointer transition-all"
@@ -205,8 +208,9 @@ export default function FeedbackWidget() {
 
                 {/* Priority */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Priority</label>
+                  <label htmlFor="feedback-priority-select" className="block text-xs font-medium text-slate-400 mb-1">Priority</label>
                   <select
+                    id="feedback-priority-select"
                     value={priority}
                     onChange={(e) => setPriority(e.target.value)}
                     className="w-full bg-slate-950/60 border border-slate-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 text-slate-350 text-xs rounded-xl px-3.5 py-2.5 outline-none appearance-none cursor-pointer transition-all"
@@ -221,9 +225,10 @@ export default function FeedbackWidget() {
 
               {/* Component Context */}
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Component / Module Name</label>
+                <label htmlFor="feedback-component-input" className="block text-xs font-medium text-slate-400 mb-1">Component / Module Name</label>
                 <input
                   type="text"
+                  id="feedback-component-input"
                   placeholder="e.g. sidebar, optimize-page, database"
                   value={component}
                   onChange={(e) => setComponent(e.target.value)}

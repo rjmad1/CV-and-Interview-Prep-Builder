@@ -116,7 +116,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   fetchEvidenceChunks: async (jdId: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/evidence/retrieve?jd_id=${jdId}`);
+      const res = await apiFetch(`${API_URL}/evidence/retrieve?jd_id=${jdId}`);
       if (!res.ok) throw new Error("Failed to retrieve candidate evidence chunks");
       const data = await res.json();
       set({ evidenceChunks: data, loading: false });
@@ -128,7 +128,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   fetchDocuments: async () => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/documents`);
+      const res = await apiFetch(`${API_URL}/documents`);
       if (!res.ok) throw new Error("Failed to fetch documents");
       const data = await res.json();
       set({ documents: data, loading: false });
@@ -142,7 +142,7 @@ export const useCISStore = create<CISState>((set, get) => ({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API_URL}/documents/scan`, {
+      const res = await apiFetch(`${API_URL}/documents/scan`, {
         method: "POST",
         body: formData,
       });
@@ -158,7 +158,7 @@ export const useCISStore = create<CISState>((set, get) => ({
   analyzeJD: async (jdText: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_URL}/jd/analyze`, {
+      const res = await apiFetch(`${API_URL}/jd/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jd_text: jdText }),

@@ -4,24 +4,32 @@ import io
 import logging
 import os
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Any, Dict, List
 
 from apps.api.src.config import settings
 from apps.api.src.database import get_db
-from apps.api.src.models import (
-    Document, DocumentChunk, EvidenceBundle, GenerationSession,
-    JobDescription, ResumeTemplate, ResumeVersion, ResumeDiff,
-    SkillRequirement, TraceRecord, User,
-)
-from apps.api.src.routers.deps import get_current_user
 from apps.api.src.graph.evidence_retrieval import evidence_retrieval_graph
 from apps.api.src.graph.resume_optimization import resume_optimization_graph
+from apps.api.src.models import (
+    Document,
+    DocumentChunk,
+    EvidenceBundle,
+    GenerationSession,
+    JobDescription,
+    ResumeDiff,
+    ResumeTemplate,
+    ResumeVersion,
+    SkillRequirement,
+    TraceRecord,
+    User,
+)
+from apps.api.src.routers.deps import get_current_user
 from apps.api.src.utils.encryption import read_vault_file
 from apps.api.src.utils.pdf_generator import convert_docx_to_pdf
 
@@ -40,14 +48,14 @@ class EvidenceItem(BaseModel):
 class ResumeGenerateRequest(BaseModel):
     template_id: uuid.UUID
     jd_id: uuid.UUID
-    selected_evidence_ids: List[uuid.UUID]
+    selected_evidence_ids: list[uuid.UUID]
 
 
 class ResumeResponse(BaseModel):
     resume_id: uuid.UUID
     version: int
     generated_text: str
-    evidence_bundle: List[EvidenceItem]
+    evidence_bundle: list[EvidenceItem]
 
 
 class ResumeDiffResponse(BaseModel):
@@ -91,7 +99,7 @@ class CompareVersionsRequest(BaseModel):
 
 async def _fetch_evidence_for_version(
     db: AsyncSession, rv: ResumeVersion
-) -> List[EvidenceItem]:
+) -> list[EvidenceItem]:
     """Loads evidence items for a resume version via its TraceRecord links."""
     if not rv.evidence_bundle_id:
         return []
@@ -139,7 +147,7 @@ async def get_active_template(
     return ResumeTemplateResponse(id=template.id, name=template.name, is_active=template.is_active)
 
 
-@router.get("/versions", response_model=List[ResumeVersionListResponse])
+@router.get("/versions", response_model=list[ResumeVersionListResponse])
 async def list_resume_versions(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),

@@ -6,7 +6,7 @@ previously duplicated across main.py, graph/resume_optimization.py, and
 the cover-letter generation endpoint.
 """
 import re
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 

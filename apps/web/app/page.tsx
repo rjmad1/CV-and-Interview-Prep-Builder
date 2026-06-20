@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useCISStore, DocumentInfo } from "./store";
+import { apiFetch, API_BASE } from "./api/apiFetch";
 
 export default function CVVaultPage() {
   const {
@@ -117,9 +118,9 @@ export default function CVVaultPage() {
       {/* Header and Global Search */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--md-sys-color-outline)]/20 pb-6">
         <div>
-          <h2 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
+          <h1 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
             <span>📁</span> CV Vault <span className="text-xs font-mono font-medium px-2.5 py-0.5 rounded-full bg-[var(--md-sys-color-primary)]/10 text-[var(--md-sys-color-primary)] border border-[var(--md-sys-color-primary)]/20 uppercase tracking-wider">Central Repository</span>
-          </h2>
+          </h1>
           <p className="text-slate-400 text-xs mt-1">Organize resumes, cover letter versions, portfolios, and manage system storage settings.</p>
         </div>
 
@@ -128,6 +129,8 @@ export default function CVVaultPage() {
           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
           <input
             type="text"
+            id="global-search-bar"
+            aria-label="Search by role, company, or skill"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by role, company, skill..."
@@ -193,8 +196,9 @@ export default function CVVaultPage() {
             
             <form onSubmit={handleFileUpload} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Asset Category</label>
+                <label htmlFor="asset-category-select" className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Asset Category</label>
                 <select
+                  id="asset-category-select"
                   value={uploadType}
                   onChange={(e) => setUploadType(e.target.value)}
                   className="w-full bg-slate-950/80 rounded-xl border border-[var(--md-sys-color-outline)]/30 p-2.5 text-xs text-slate-300 focus:outline-none"
@@ -879,7 +883,7 @@ export default function CVVaultPage() {
                     // Delete doc in list
                     const { deleteApplication } = useCISStore.getState();
                     // Just call general delete document
-                    const res = await fetch(`http://localhost:8000/api/documents/${confirmDelete.id}`, { method: "DELETE" });
+                    const res = await apiFetch(`${API_BASE}/documents/${confirmDelete.id}`, { method: "DELETE" });
                     if (res.ok) await fetchDocuments();
                   } else if (confirmDelete.isLetter) {
                     await deleteCoverLetter(confirmDelete.id);

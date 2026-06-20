@@ -1,12 +1,11 @@
 import uuid
-from typing import Dict, List, Any, Optional
 from datetime import date
+from typing import Any
+
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from apps.api.src.models import (
-    User, Document, DocumentChunk, Skill, Experience,
-    Certification, Education, Achievement
-)
+
+from apps.api.src.models import Achievement, Certification, Document, DocumentChunk, Education, Experience, Skill
+
 
 class CareerRepository:
     def __init__(self, db: Session):
@@ -18,7 +17,7 @@ class CareerRepository:
         return val
 
     # --- Profile Aggregation ---
-    def get_user_profile(self, user_id: Any) -> Dict[str, Any]:
+    def get_user_profile(self, user_id: Any) -> dict[str, Any]:
         """Aggregates all career components for a user into a single profile payload."""
         uid = self._to_uuid(user_id)
         return {
@@ -30,7 +29,7 @@ class CareerRepository:
         }
 
     # --- Experience CRUD ---
-    def get_experiences(self, user_id: Any) -> List[Experience]:
+    def get_experiences(self, user_id: Any) -> list[Experience]:
         uid = self._to_uuid(user_id)
         return self.db.query(Experience).filter(Experience.user_id == uid).order_by(Experience.start_date.desc()).all()
 
@@ -41,7 +40,7 @@ class CareerRepository:
         role_title: str,
         start_date: date,
         description: str,
-        end_date: Optional[date] = None,
+        end_date: date | None = None,
         is_current: bool = False
     ) -> Experience:
         exp = Experience(
@@ -59,7 +58,7 @@ class CareerRepository:
         self.db.refresh(exp)
         return exp
 
-    def update_experience(self, user_id: Any, experience_id: Any, updates: Dict[str, Any]) -> Optional[Experience]:
+    def update_experience(self, user_id: Any, experience_id: Any, updates: dict[str, Any]) -> Experience | None:
         uid = self._to_uuid(user_id)
         eid = self._to_uuid(experience_id)
         exp = self.db.query(Experience).filter(Experience.id == eid, Experience.user_id == uid).first()
@@ -82,11 +81,11 @@ class CareerRepository:
         return False
 
     # --- Skill CRUD ---
-    def get_skills(self, user_id: Any) -> List[Skill]:
+    def get_skills(self, user_id: Any) -> list[Skill]:
         uid = self._to_uuid(user_id)
         return self.db.query(Skill).filter(Skill.user_id == uid).all()
 
-    def add_skill(self, user_id: Any, name: str, category: str, proficiency_level: Optional[str] = None) -> Skill:
+    def add_skill(self, user_id: Any, name: str, category: str, proficiency_level: str | None = None) -> Skill:
         skill = Skill(
             id=uuid.uuid4(),
             user_id=self._to_uuid(user_id),
@@ -110,7 +109,7 @@ class CareerRepository:
         return False
 
     # --- Certification CRUD ---
-    def get_certifications(self, user_id: Any) -> List[Certification]:
+    def get_certifications(self, user_id: Any) -> list[Certification]:
         uid = self._to_uuid(user_id)
         return self.db.query(Certification).filter(Certification.user_id == uid).all()
 
@@ -120,8 +119,8 @@ class CareerRepository:
         name: str,
         issuing_organization: str,
         issue_date: date,
-        expiry_date: Optional[date] = None,
-        credential_id: Optional[str] = None
+        expiry_date: date | None = None,
+        credential_id: str | None = None
     ) -> Certification:
         cert = Certification(
             id=uuid.uuid4(),
@@ -148,7 +147,7 @@ class CareerRepository:
         return False
 
     # --- Education CRUD ---
-    def get_education(self, user_id: Any) -> List[Education]:
+    def get_education(self, user_id: Any) -> list[Education]:
         uid = self._to_uuid(user_id)
         return self.db.query(Education).filter(Education.user_id == uid).all()
 
@@ -159,8 +158,8 @@ class CareerRepository:
         degree: str,
         field_of_study: str,
         start_date: date,
-        end_date: Optional[date] = None,
-        grade: Optional[str] = None
+        end_date: date | None = None,
+        grade: str | None = None
     ) -> Education:
         edu = Education(
             id=uuid.uuid4(),
@@ -188,11 +187,11 @@ class CareerRepository:
         return False
 
     # --- Achievement CRUD ---
-    def get_achievements(self, user_id: Any) -> List[Achievement]:
+    def get_achievements(self, user_id: Any) -> list[Achievement]:
         uid = self._to_uuid(user_id)
         return self.db.query(Achievement).filter(Achievement.user_id == uid).all()
 
-    def add_achievement(self, user_id: Any, title: str, description: str, date_achieved: Optional[date] = None) -> Achievement:
+    def add_achievement(self, user_id: Any, title: str, description: str, date_achieved: date | None = None) -> Achievement:
         ach = Achievement(
             id=uuid.uuid4(),
             user_id=self._to_uuid(user_id),
@@ -216,11 +215,11 @@ class CareerRepository:
         return False
 
     # --- Document and Chunk Ingestion Operations ---
-    def get_documents(self, user_id: Any) -> List[Document]:
+    def get_documents(self, user_id: Any) -> list[Document]:
         uid = self._to_uuid(user_id)
         return self.db.query(Document).filter(Document.user_id == uid).all()
 
-    def get_document(self, user_id: Any, document_id: Any) -> Optional[Document]:
+    def get_document(self, user_id: Any, document_id: Any) -> Document | None:
         uid = self._to_uuid(user_id)
         did = self._to_uuid(document_id)
         return self.db.query(Document).filter(Document.id == did, Document.user_id == uid).first()
@@ -233,7 +232,7 @@ class CareerRepository:
         mime_type: str,
         document_type: str,
         parsed_text: str = "",
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: dict[str, Any] | None = None
     ) -> Document:
         doc = Document(
             id=uuid.uuid4(),
@@ -260,7 +259,7 @@ class CareerRepository:
             return True
         return False
 
-    def get_document_chunks(self, user_id: Any, document_id: Any) -> List[DocumentChunk]:
+    def get_document_chunks(self, user_id: Any, document_id: Any) -> list[DocumentChunk]:
         uid = self._to_uuid(user_id)
         did = self._to_uuid(document_id)
         return self.db.query(DocumentChunk).filter(
@@ -275,7 +274,7 @@ class CareerRepository:
         chunk_index: int,
         chunk_text: str,
         embedding_vector_id: uuid.UUID,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: dict[str, Any] | None = None
     ) -> DocumentChunk:
         chunk = DocumentChunk(
             id=uuid.uuid4(),

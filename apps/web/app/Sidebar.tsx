@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
@@ -100,34 +101,48 @@ export default function Sidebar() {
         </div>
         
         <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--md-sys-color-outline)]/20">
-          <a
+          <Link
             href="/"
             onClick={() => setOpen(false)}
             className={navLinkClass("/")}
           >
             <span>📁</span> CV Vault
-          </a>
-          <a
+          </Link>
+          <Link
             href="/optimize"
             onClick={() => setOpen(false)}
             className={navLinkClass("/optimize")}
           >
             <span>⚙️</span> CV Optimizer
-          </a>
-          <a
+          </Link>
+          <Link
             href="/applications"
             onClick={() => setOpen(false)}
             className={navLinkClass("/applications")}
           >
             <span>📅</span> Application Tracker
-          </a>
-          <a
+          </Link>
+          <Link
+            href="/saved-applications"
+            onClick={() => setOpen(false)}
+            className={navLinkClass("/saved-applications")}
+          >
+            <span>⭐</span> Saved Opportunities
+          </Link>
+          <Link
             href="/interview"
             onClick={() => setOpen(false)}
             className={navLinkClass("/interview")}
           >
             <span>🗣️</span> Interview Simulator
-          </a>
+          </Link>
+          <Link
+            href="/learning"
+            onClick={() => setOpen(false)}
+            className={navLinkClass("/learning")}
+          >
+            <span>🎓</span> Learning Upgrade
+          </Link>
         </nav>
 
         <div className="p-6 border-t border-[var(--md-sys-color-outline)]/20 bg-[var(--md-sys-color-surface-container-high)]">

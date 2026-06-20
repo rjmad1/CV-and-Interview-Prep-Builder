@@ -1,14 +1,15 @@
-import os
 import logging
+import os
 import uuid as py_uuid
-from typing import Dict, List, Any, TypedDict
-from langgraph.graph import StateGraph, END
-from apps.api.src.config import settings
+from typing import Any, TypedDict
+
+from langgraph.graph import END, StateGraph
+
 from apps.api.src.database import SessionLocal
-from apps.api.src.models import Document
-from apps.api.src.utils.parsers import parse_document
 from apps.api.src.engine.classification_engine import ClassificationEngine
 from apps.api.src.engine.embedding_pipeline import EmbeddingPipeline
+from apps.api.src.models import Document
+from apps.api.src.utils.parsers import parse_document
 
 logger = logging.getLogger("cis-graph-document")
 
@@ -17,14 +18,14 @@ class DocumentState(TypedDict):
     file_content: bytes | None
     parsed_text: str
     document_type: str  # 'resume', 'verification', 'achievement'
-    chunks: List[str]
-    embeddings: List[List[float]]
+    chunks: list[str]
+    embeddings: list[list[float]]
     status: str
-    metadata: Dict[str, Any]  # Contains document_id and user_id
+    metadata: dict[str, Any]  # Contains document_id and user_id
 
 # --- Node Implementations ---
 
-def scan_file(state: DocumentState) -> Dict[str, Any]:
+def scan_file(state: DocumentState) -> dict[str, Any]:
     """Scans file path, validates size/extension, reads binary content."""
     file_path = state["file_path"]
     logger.info(f"Scanning file: {file_path}")
@@ -32,8 +33,8 @@ def scan_file(state: DocumentState) -> Dict[str, Any]:
         logger.warning(f"File {file_path} not found. Creating mock file contents for pipeline.")
         file_content = b"Mock Resume Content: John Doe is a Senior Python Developer with 6 years experience in FastAPI and PostgreSQL RLS."
     else:
-        from apps.api.src.utils.encryption import read_vault_file
         from apps.api.src.config import settings
+        from apps.api.src.utils.encryption import read_vault_file
         try:
             file_content = read_vault_file(file_path, decrypt=settings.STORAGE_ENCRYPTION_ACTIVE)
         except Exception:
@@ -45,20 +46,20 @@ def scan_file(state: DocumentState) -> Dict[str, Any]:
         "status": "scanned"
     }
 
-def parse_file(state: DocumentState) -> Dict[str, Any]:
+def parse_file(state: DocumentState) -> dict[str, Any]:
     """Parses DOCX/PDF to extract plain text contents."""
     logger.info("Parsing file contents...")
     file_content = state["file_content"]
     file_path = state["file_path"]
     filename = os.path.basename(file_path)
-    
+
     parsed_text = parse_document(file_content, filename)
     return {
         "parsed_text": parsed_text,
         "status": "parsed"
     }
 
-async def classify_doc(state: DocumentState) -> Dict[str, Any]:
+async def classify_doc(state: DocumentState) -> dict[str, Any]:
     """Classifies document type based on contents (e.g. Resume vs Certification)."""
     current_type = state.get("document_type", "resume")
     if current_type and current_type not in ["resume", "verification", "achievement"]:
@@ -67,51 +68,51 @@ async def classify_doc(state: DocumentState) -> Dict[str, Any]:
             "document_type": current_type,
             "status": "classified"
         }
-        
+
     logger.info("Classifying document type based on content...")
     parsed_text = state["parsed_text"]
-    
+
     classifier = ClassificationEngine()
     category = await classifier.classify(parsed_text)
-    
+
     return {
         "document_type": category,
         "status": "classified"
     }
 
-def chunk_text(state: DocumentState) -> Dict[str, Any]:
+def chunk_text(state: DocumentState) -> dict[str, Any]:
     """Splits document text into manageable semantic chunks for indexing."""
     logger.info("Chunking text content using EmbeddingPipeline...")
     raw_text = state["parsed_text"]
-    
+
     pipeline = EmbeddingPipeline()
     chunks = pipeline.chunk_text(raw_text)
-    
+
     return {
         "chunks": chunks,
         "status": "chunked"
     }
 
-async def generate_embeddings(state: DocumentState) -> Dict[str, Any]:
+async def generate_embeddings(state: DocumentState) -> dict[str, Any]:
     """Generates dense vector embeddings using EmbeddingPipeline."""
     logger.info(f"Generating embeddings for {len(state['chunks'])} chunks...")
     chunks = state["chunks"]
-    
+
     pipeline = EmbeddingPipeline()
     embeddings = await pipeline.generate_embeddings(chunks)
-    
+
     return {
         "embeddings": embeddings,
         "status": "embedded"
     }
 
-def store_document(state: DocumentState) -> Dict[str, Any]:
+def store_document(state: DocumentState) -> dict[str, Any]:
     """Stores metadata in PostgreSQL and vector embeddings in Qdrant via EmbeddingPipeline."""
     logger.info("Persisting metadata in Postgres and vectors in Qdrant...")
     doc_id = py_uuid.UUID(str(state["metadata"]["document_id"]))
     user_id = py_uuid.UUID(str(state["metadata"]["user_id"]))
     filename = os.path.basename(state["file_path"])
-    
+
     db = SessionLocal()
     try:
         # 1. Update/create Document record in PostgreSQL
@@ -138,7 +139,7 @@ def store_document(state: DocumentState) -> Dict[str, Any]:
             # Clean existing user skills to prevent duplicates
             db.query(Skill).filter(Skill.user_id == user_id).delete()
             db.commit()
-            
+
             # Simple keyword-based extraction taxonomy
             SKILLS_TAXONOMY = [
                 ("Python", "technical"),
@@ -174,7 +175,7 @@ def store_document(state: DocumentState) -> Dict[str, Any]:
                 ("DPDP", "technical"),
                 ("CCPA", "technical")
             ]
-            
+
             parsed_lower = state["parsed_text"].lower()
             for skill_name, category in SKILLS_TAXONOMY:
                 if skill_name.lower() in parsed_lower:
@@ -194,13 +195,13 @@ def store_document(state: DocumentState) -> Dict[str, Any]:
         from apps.api.src.models import DocumentChunk
         db.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).delete()
         db.commit()
-        
+
         # Save chunks and vectors
         # Note: We run process_and_index_document logic inline to match the existing state
         qdrant_points = []
-        for idx, (chunk_text_str, vector) in enumerate(zip(state["chunks"], state["embeddings"])):
+        for idx, (chunk_text_str, vector) in enumerate(zip(state["chunks"], state["embeddings"], strict=False)):
             chunk_id = py_uuid.uuid4()
-            
+
             db_chunk = DocumentChunk(
                 id=chunk_id,
                 document_id=doc_id,
@@ -211,7 +212,7 @@ def store_document(state: DocumentState) -> Dict[str, Any]:
                 meta_data={}
             )
             db.add(db_chunk)
-            
+
             if pipeline.qdrant_client:
                 from qdrant_client.http.models import PointStruct
                 qdrant_points.append(
@@ -229,19 +230,28 @@ def store_document(state: DocumentState) -> Dict[str, Any]:
         db.commit()
 
         if pipeline.qdrant_client and qdrant_points:
+            try:
+                pipeline.qdrant_client.create_shard_key(
+                    collection_name="career_chunks",
+                    shard_key=str(user_id)
+                )
+            except Exception as shard_err:
+                logger.debug(f"Shard key creation note in document processing: {shard_err}")
+
             pipeline.qdrant_client.upsert(
                 collection_name="career_chunks",
-                points=qdrant_points
+                points=qdrant_points,
+                shard_key_selector=str(user_id)
             )
-            logger.info(f"Upserted {len(qdrant_points)} chunks to Qdrant.")
-            
+            logger.info(f"Upserted {len(qdrant_points)} chunks to Qdrant with shard key {user_id}.")
+
     except Exception as e:
         logger.error(f"Failed to store parsed document: {e}")
         db.rollback()
-        return {"status": f"failed: {str(e)}"}
+        return {"status": f"failed: {e!s}"}
     finally:
         db.close()
-        
+
     return {
         "status": "completed"
     }

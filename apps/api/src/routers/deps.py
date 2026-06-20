@@ -6,18 +6,18 @@ Provides:
   - get_db: async DB session dependency (re-exported from database module)
   - Common async DB helpers replacing the sync/async shim pattern
 """
-import uuid
 import logging
+import uuid
 
 import jwt
-from fastapi import HTTPException, status, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.config import settings
 from apps.api.src.database import get_db, set_tenant_context_async
-from apps.api.src.models import User, ResumeTemplate
+from apps.api.src.models import ResumeTemplate, User
 
 logger = logging.getLogger("cis-api")
 security = HTTPBearer(auto_error=False)

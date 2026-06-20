@@ -6,20 +6,41 @@ import uuid
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.config import settings
 from apps.api.src.database import get_db
 from apps.api.src.models import (
-    Achievement, Application, ATSReport, Certification, CoverLetterVersion,
-    DeveloperRequest, DeveloperTask, Document, DocumentChunk, Education, Experience,
-    EvidenceBundle, GapAnalysis, GenerationSession, HallucinationEvent, Interview,
-    InterviewSessionState, JobDescription, KeywordAnalysis, Outcome, ResumeDiff,
-    ResumeTemplate, ResumeVersion, Skill, SkillRequirement, TraceRecord, User,
+    Achievement,
+    Application,
+    ATSReport,
+    Certification,
+    CoverLetterVersion,
+    DeveloperRequest,
+    DeveloperTask,
+    Document,
+    DocumentChunk,
+    Education,
+    EvidenceBundle,
+    Experience,
+    GapAnalysis,
+    GenerationSession,
+    HallucinationEvent,
+    Interview,
+    InterviewSessionState,
+    JobDescription,
+    KeywordAnalysis,
+    Outcome,
+    ResumeDiff,
+    ResumeTemplate,
+    ResumeVersion,
+    Skill,
+    SkillRequirement,
+    TraceRecord,
+    User,
 )
 from apps.api.src.routers.deps import get_current_user
-from apps.api.src.utils.ai_client import nvidia_api_key_ctx, ai_gateway_mode_ctx
 
 logger = logging.getLogger("cis-api")
 router = APIRouter(tags=["Settings & Lifecycle"])

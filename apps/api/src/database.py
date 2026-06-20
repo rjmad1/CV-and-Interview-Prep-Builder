@@ -1,7 +1,9 @@
 import os
-from sqlalchemy import create_engine, text, event
-from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+
 from apps.api.src.config import settings
 
 # Use TESTING env var only — never sys.modules introspection (order-dependent, brittle)

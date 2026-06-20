@@ -20,9 +20,10 @@ def fixture_client():
     
     # Override get_db dependency
     def override_get_db():
+        from apps.api.tests.test_utils import AsyncSessionShim
         session = TestingSessionLocal()
         try:
-            yield session
+            yield AsyncSessionShim(session)
         finally:
             session.close()
             

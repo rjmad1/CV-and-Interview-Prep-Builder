@@ -1,6 +1,8 @@
 import logging
-from typing import Dict, List, Any, TypedDict
-from langgraph.graph import StateGraph, END
+from typing import Any, TypedDict
+
+from langgraph.graph import END, StateGraph
+
 from apps.api.src.database import SessionLocal
 from apps.api.src.engine.hybrid_retrieval import HybridRetrieval
 
@@ -9,17 +11,17 @@ logger = logging.getLogger("cis-graph-retrieval")
 class RetrievalState(TypedDict):
     user_id: str
     session_id: str
-    jd_requirements: List[str]  # Skills/keywords to search for
-    sparse_results: List[Dict[str, Any]]
-    dense_results: List[Dict[str, Any]]
-    merged_results: List[Dict[str, Any]]
-    reranked_results: List[Dict[str, Any]]
-    evidence_bundle: Dict[str, Any]
+    jd_requirements: list[str]  # Skills/keywords to search for
+    sparse_results: list[dict[str, Any]]
+    dense_results: list[dict[str, Any]]
+    merged_results: list[dict[str, Any]]
+    reranked_results: list[dict[str, Any]]
+    evidence_bundle: dict[str, Any]
     status: str
 
 # --- Node Implementations ---
 
-def bm25_sparse_search(state: RetrievalState) -> Dict[str, Any]:
+def bm25_sparse_search(state: RetrievalState) -> dict[str, Any]:
     """Runs keyword lexical search across the parsed document chunks in SQL database."""
     logger.info("Executing sparse lexical search...")
     db = SessionLocal()
@@ -35,7 +37,7 @@ def bm25_sparse_search(state: RetrievalState) -> Dict[str, Any]:
     finally:
         db.close()
 
-async def vector_dense_search(state: RetrievalState) -> Dict[str, Any]:
+async def vector_dense_search(state: RetrievalState) -> dict[str, Any]:
     """Runs vector similarity dense search against Qdrant database."""
     logger.info("Executing vector similarity search...")
     db = SessionLocal()
@@ -51,7 +53,7 @@ async def vector_dense_search(state: RetrievalState) -> Dict[str, Any]:
     finally:
         db.close()
 
-def merge_results(state: RetrievalState) -> Dict[str, Any]:
+def merge_results(state: RetrievalState) -> dict[str, Any]:
     """Merges sparse and dense search results using Reciprocal Rank Fusion (RRF)."""
     logger.info("Merging search results via RRF...")
     db = SessionLocal()
@@ -68,7 +70,7 @@ def merge_results(state: RetrievalState) -> Dict[str, Any]:
     finally:
         db.close()
 
-async def rerank_results(state: RetrievalState) -> Dict[str, Any]:
+async def rerank_results(state: RetrievalState) -> dict[str, Any]:
     """Reranks candidates using Cross-Encoder Reranker via AI Gateway."""
     logger.info("Reranking candidates...")
     db = SessionLocal()
@@ -85,7 +87,7 @@ async def rerank_results(state: RetrievalState) -> Dict[str, Any]:
     finally:
         db.close()
 
-def compile_evidence_bundle(state: RetrievalState) -> Dict[str, Any]:
+def compile_evidence_bundle(state: RetrievalState) -> dict[str, Any]:
     """Compiles the final audited evidence bundle and traces source citations."""
     logger.info("Compiling evidence bundle with audit trails...")
     db = SessionLocal()
@@ -114,7 +116,7 @@ builder.add_node("merge", merge_results)
 builder.add_node("rerank", rerank_results)
 builder.add_node("compile_bundle", compile_evidence_bundle)
 
-def start_retrieval(state: RetrievalState) -> Dict[str, Any]:
+def start_retrieval(state: RetrievalState) -> dict[str, Any]:
     return {"status": "retrieval_started"}
 
 builder.add_node("start", start_retrieval)

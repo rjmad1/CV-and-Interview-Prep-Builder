@@ -100,7 +100,7 @@ export default function ApplicationsPage() {
     <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-white font-sans">Application & Pipeline Tracker</h2>
+          <h1 className="text-2xl font-black text-white font-sans">Application & Pipeline Tracker</h1>
           <p className="text-xs text-slate-400 mt-1">
             Track pipeline progress of sent job applications, scheduled interviews, and final feedback outcomes.
           </p>
@@ -220,8 +220,9 @@ export default function ApplicationsPage() {
             <h3 className="text-md font-bold text-white">Log Job Application</h3>
             <form onSubmit={handleAddSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Target Role (Job Description)</label>
+                <label htmlFor="target-role-select" className="text-[10px] uppercase font-bold text-slate-400">Target Role (Job Description)</label>
                 <select
+                  id="target-role-select"
                   value={selectedJD}
                   onChange={(e) => setSelectedJD(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-900 rounded-lg p-2 text-slate-300 focus:outline-none focus:border-purple-500/50"
@@ -237,8 +238,9 @@ export default function ApplicationsPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Tailored Resume Version</label>
+                <label htmlFor="tailored-resume-select" className="text-[10px] uppercase font-bold text-slate-400">Tailored Resume Version</label>
                 <select
+                  id="tailored-resume-select"
                   value={selectedResume}
                   onChange={(e) => setSelectedResume(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-900 rounded-lg p-2 text-slate-300 focus:outline-none focus:border-purple-500/50"
@@ -254,8 +256,9 @@ export default function ApplicationsPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Notes / Details</label>
+                <label htmlFor="notes-textarea" className="text-[10px] uppercase font-bold text-slate-400">Notes / Details</label>
                 <textarea
+                  id="notes-textarea"
                   value={appNotes}
                   onChange={(e) => setAppNotes(e.target.value)}
                   rows={3}
@@ -291,8 +294,9 @@ export default function ApplicationsPage() {
             <h3 className="text-md font-bold text-white font-sans">Schedule Interview Round</h3>
             <form onSubmit={handleScheduleSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Round Number</label>
+                <label htmlFor="round-number-input" className="text-[10px] uppercase font-bold text-slate-400">Round Number</label>
                 <input
+                  id="round-number-input"
                   type="number"
                   min="1"
                   max="10"
@@ -304,8 +308,9 @@ export default function ApplicationsPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Date & Time</label>
+                <label htmlFor="interview-date-input" className="text-[10px] uppercase font-bold text-slate-400">Date & Time</label>
                 <input
+                  id="interview-date-input"
                   type="datetime-local"
                   value={interviewDate}
                   onChange={(e) => setInterviewDate(e.target.value)}
@@ -315,8 +320,9 @@ export default function ApplicationsPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Interviewer Details / Platform</label>
+                <label htmlFor="interviewer-info-input" className="text-[10px] uppercase font-bold text-slate-400">Interviewer Details / Platform</label>
                 <input
+                  id="interviewer-info-input"
                   type="text"
                   placeholder="E.g. Technical panel with team lead, Google Meet link..."
                   value={interviewerInfo}
@@ -352,8 +358,9 @@ export default function ApplicationsPage() {
             <h3 className="text-md font-bold text-white">Log Process Outcome</h3>
             <form onSubmit={handleOutcomeSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Outcome Decision</label>
+                <label htmlFor="outcome-decision-select" className="text-[10px] uppercase font-bold text-slate-400">Outcome Decision</label>
                 <select
+                  id="outcome-decision-select"
                   value={outcomeType}
                   onChange={(e) => setOutcomeType(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-900 rounded-lg p-2 text-slate-300 focus:outline-none focus:border-purple-500/50"
@@ -366,8 +373,9 @@ export default function ApplicationsPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Feedback / Notes</label>
+                <label htmlFor="outcome-feedback-textarea" className="text-[10px] uppercase font-bold text-slate-400">Feedback / Notes</label>
                 <textarea
+                  id="outcome-feedback-textarea"
                   value={outcomeFeedback}
                   onChange={(e) => setOutcomeFeedback(e.target.value)}
                   rows={3}

@@ -1,5 +1,7 @@
 import os
+
 from cryptography.fernet import Fernet
+
 from apps.api.src.config import settings
 
 

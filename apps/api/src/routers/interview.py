@@ -7,17 +7,22 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
-from typing import Any, Dict, List
 
+from apps.api.src.config import settings
 from apps.api.src.database import get_db
+from apps.api.src.graph.evidence_retrieval import evidence_retrieval_graph
+from apps.api.src.graph.interview_prep import interview_prep_graph
 from apps.api.src.models import (
-    DocumentChunk, GenerationSession, InterviewSessionState,
-    JobDescription, ResumeVersion, SkillRequirement, TraceRecord, User,
+    DocumentChunk,
+    GenerationSession,
+    InterviewSessionState,
+    JobDescription,
+    ResumeVersion,
+    SkillRequirement,
+    TraceRecord,
+    User,
 )
 from apps.api.src.routers.deps import get_current_user
-from apps.api.src.graph.interview_prep import interview_prep_graph
-from apps.api.src.graph.evidence_retrieval import evidence_retrieval_graph
-from apps.api.src.config import settings
 from apps.api.src.utils.ai_client import ai_gateway_client
 
 logger = logging.getLogger("cis-api")
@@ -52,9 +57,9 @@ class InterviewFeedbackResponse(BaseModel):
 class InterviewReportResponse(BaseModel):
     session_id: uuid.UUID
     readiness_score: float
-    key_strengths: List[str]
-    improvement_areas: List[str]
-    transcript: List[Dict[str, str]]
+    key_strengths: list[str]
+    improvement_areas: list[str]
+    transcript: list[dict[str, str]]
 
 
 class STARStory(BaseModel):
@@ -70,9 +75,9 @@ class TechnicalFlashcard(BaseModel):
 
 
 class PrepCardResponse(BaseModel):
-    star_stories: List[STARStory]
-    technical_flashcards: List[TechnicalFlashcard]
-    behavioral_tips: List[str]
+    star_stories: list[STARStory]
+    technical_flashcards: list[TechnicalFlashcard]
+    behavioral_tips: list[str]
 
 
 # --- Helpers ---
@@ -218,7 +223,7 @@ async def get_interview_report(
     feedbacks = state.get("coaching_feedback", [])
 
     transcript = []
-    for idx, (q, r) in enumerate(zip(questions, responses)):
+    for idx, (q, r) in enumerate(zip(questions, responses, strict=False)):
         transcript.append({"speaker": "Interviewer", "text": q["text"]})
         transcript.append({"speaker": "Candidate", "text": r})
         if idx < len(feedbacks):

@@ -130,3 +130,23 @@ h1, h2, h3, h4, h5, h6 {
 .glow-button:hover::after {
   left: 100%;
 }
+
+/* Accessibility & Focus-Visible States */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px rgba(168, 199, 250, 0.25) !important;
+}
+
+/* Improve contrast ratio for slate-400 and slate-500 in dark mode */
+.text-slate-400 {
+  color: #c4c6d0 !important; /* Lighter slate color for better readability (contrast ratio > 4.5:1) */
+}
+.text-slate-500 {
+  color: #a4a6b0 !important; /* Lighter slate color for better readability */
+}

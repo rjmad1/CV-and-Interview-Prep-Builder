@@ -11,7 +11,7 @@ export default function SavedApplicationsPage() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div>
-        <h2 className="text-2xl font-black text-white">Saved Applications</h2>
+        <h1 className="text-2xl font-black text-white">Saved Applications</h1>
         <p className="text-xs text-slate-400 mt-1">Manage, bookmark, and queue target roles from various job boards to analyze gap metrics.</p>
       </div>
 

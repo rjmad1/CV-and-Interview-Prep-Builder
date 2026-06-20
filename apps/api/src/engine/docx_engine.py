@@ -1,13 +1,14 @@
-import os
+import copy
 import logging
-import zipfile
+import os
+import shutil
 import tempfile
 import xml.etree.ElementTree as ET
-import copy
-import shutil
+import zipfile
+
 from docx import Document
-from docx.shared import Pt, Inches
 from docx.oxml import OxmlElement
+from docx.shared import Inches, Pt
 from docx.text.paragraph import Paragraph
 
 logger = logging.getLogger("cis-docx-engine")
@@ -40,11 +41,11 @@ class DocxEngine:
         Falls back to python-docx text replacement if direct XML fails.
         """
         logger.info(f"Merging changes into template {template_path}")
-        
+
         # Ensure the template exists; if not, create a base styled template
         if not os.path.exists(template_path):
             self._create_default_template(template_path)
-            
+
         try:
             # Attempt direct XML/ZIP manipulation
             success = self.unzip_and_replace_xml(template_path, optimized_sections, output_path, placeholders)
@@ -68,17 +69,17 @@ class DocxEngine:
             # Unzip template files
             with zipfile.ZipFile(template_path, 'r') as zip_ref:
                 zip_ref.extractall(temp_dir)
-                
+
             doc_xml_path = os.path.join(temp_dir, 'word', 'document.xml')
             if not os.path.exists(doc_xml_path):
                 logger.error("word/document.xml not found in template package.")
                 return False
-                
-            with open(doc_xml_path, 'r', encoding='utf-8') as f:
+
+            with open(doc_xml_path, encoding='utf-8') as f:
                 original_xml = f.read()
-                
+
             root = ET.fromstring(original_xml)
-            
+
             # 1. Perform placeholder interpolation
             if placeholders:
                 for t_el in root.findall(f".//{W}t"):
@@ -87,7 +88,7 @@ class DocxEngine:
                             ph = f"{{{{{k}}}}}"
                             if ph in t_el.text:
                                 t_el.text = t_el.text.replace(ph, v)
-                                
+
             # 2. Perform Content Control (w:sdt) replacements
             for sdt in root.findall(f".//{W}sdt"):
                 sdtPr = sdt.find(f"{W}sdtPr")
@@ -99,7 +100,7 @@ class DocxEngine:
                         if sdtContent is not None:
                             bullets = [b.strip() for b in optimized_sections[alias_val].split("\n") if b.strip()]
                             p_list = sdtContent.findall(f"{W}p")
-                            
+
                             for idx, b_text in enumerate(bullets):
                                 if idx < len(p_list):
                                     self._replace_xml_p_text(p_list[idx], b_text)
@@ -109,11 +110,11 @@ class DocxEngine:
                                         self._replace_xml_p_text(new_p, b_text)
                                         sdtContent.append(new_p)
                                         p_list.append(new_p)
-                                        
+
                             if len(p_list) > len(bullets):
                                 for p_to_clear in p_list[len(bullets):]:
                                     self._replace_xml_p_text(p_to_clear, "")
-                                    
+
             # 3. Perform Heading-based section replacements (standard body paragraphs)
             body = root.find(f"{W}body")
             if body is not None:
@@ -121,22 +122,22 @@ class DocxEngine:
                 for section_name, optimized_content in optimized_sections.items():
                     if not optimized_content:
                         continue
-                        
+
                     # Find heading paragraph matching the section title
                     heading_idx = -1
                     for idx, el in enumerate(body_children):
                         if el.tag == f"{W}p" and get_p_text(el).strip().lower() == section_name.lower():
                             heading_idx = idx
                             break
-                            
+
                     if heading_idx == -1:
                         continue
-                        
+
                     if section_name.lower() == "professional experience":
                         opt_bullets = [
                             b.strip() for b in optimized_content.split("\n") if b.strip()
                         ]
-                        
+
                         # Find existing bullet paragraphs below this heading
                         bullet_elements = []
                         idx = heading_idx + 1
@@ -150,11 +151,11 @@ class DocxEngine:
                                     pStyle = pPr.find(f"{W}pStyle")
                                     if pStyle is not None:
                                         style = pStyle.get(f"{W}val", "")
-                                        
+
                                 is_heading = style.startswith("Heading") or p_text in ["Skills Summary", "Education", "Certifications"]
                                 if is_heading:
                                     break
-                                    
+
                                 if style.startswith("List") or p_text.startswith("-") or p_text.startswith("*") or p_text.startswith("•"):
                                     bullet_elements.append(el)
                                 elif p_text == "":
@@ -163,7 +164,7 @@ class DocxEngine:
                                     if bullet_elements:
                                         break
                             idx += 1
-                            
+
                         # Replace in-place or append
                         for i, opt_text in enumerate(opt_bullets):
                             if i < len(bullet_elements):
@@ -173,7 +174,7 @@ class DocxEngine:
                                     last_el = bullet_elements[-1]
                                     new_el = copy.deepcopy(last_el)
                                     self._replace_xml_p_text(new_el, opt_text)
-                                    
+
                                     body_el_list = list(body)
                                     tree_idx = body_el_list.index(last_el)
                                     body.insert(tree_idx + 1, new_el)
@@ -181,12 +182,12 @@ class DocxEngine:
                                 else:
                                     p = ET.SubElement(body, f"{W}p")
                                     self._replace_xml_p_text(p, opt_text)
-                                    
+
                         # Clear extra paragraphs
                         if len(bullet_elements) > len(opt_bullets):
                             for bullet_el in bullet_elements[len(opt_bullets):]:
                                 self._replace_xml_p_text(bullet_el, "")
-                                
+
                     else:
                         # Single-paragraph section replacement (Skills Summary, Education, etc.)
                         idx = heading_idx + 1
@@ -207,21 +208,21 @@ class DocxEngine:
                                     target_p = el
                                     break
                             idx += 1
-                            
+
                         if target_p is not None:
                             self._replace_xml_p_text(target_p, optimized_content.strip())
-                            
+
             # Convert tree back to XML string
             modified_xml = ET.tostring(root, encoding='utf-8').decode('utf-8')
-            
+
             # Layout structural regression validation
             if not self.verify_layout_regression(original_xml, modified_xml):
                 raise ValueError("Visual Layout Preservation Check Failed: Structural elements (margins/tables) mutated.")
-                
+
             # Write modified XML back
             with open(doc_xml_path, 'w', encoding='utf-8') as f:
                 f.write(modified_xml)
-                
+
             # Repackage files into output zip/docx
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zip_out:
@@ -230,10 +231,10 @@ class DocxEngine:
                         full_path = os.path.join(root_dir, file)
                         rel_path = os.path.relpath(full_path, temp_dir)
                         zip_out.write(full_path, rel_path)
-                        
+
             logger.info(f"Direct XML AST manipulation completed successfully. Saved to {output_path}")
             return True
-            
+
         finally:
             shutil.rmtree(temp_dir)
 
@@ -241,14 +242,14 @@ class DocxEngine:
         """Modifies paragraph runs at the ElementTree XML level to preserve run format styles."""
         # Clean bullet characters
         new_text = new_text.lstrip("-*• ").strip()
-        
+
         runs = p_el.findall(f".//{W}r")
         if not runs:
             r = ET.SubElement(p_el, f"{W}r")
             t = ET.SubElement(r, f"{W}t")
             t.text = new_text
             return
-            
+
         first_t = None
         for r in runs:
             t_el = r.find(f"{W}t")
@@ -258,7 +259,7 @@ class DocxEngine:
                     first_t.text = new_text
                 else:
                     t_el.text = ""
-                    
+
         if first_t is None:
             first_t = ET.SubElement(runs[0], f"{W}t")
             first_t.text = new_text
@@ -270,14 +271,14 @@ class DocxEngine:
         """
         orig_tree = ET.fromstring(original_xml)
         mod_tree = ET.fromstring(modified_xml)
-        
+
         # 1. Check table count
         orig_tbls = len(orig_tree.findall(f".//{W}tbl"))
         mod_tbls = len(mod_tree.findall(f".//{W}tbl"))
         if orig_tbls != mod_tbls:
             logger.error(f"Regression: Table count changed from {orig_tbls} to {mod_tbls}")
             return False
-            
+
         # 2. Check margins and page settings
         orig_pgMar = orig_tree.find(f".//{W}pgMar")
         mod_pgMar = mod_tree.find(f".//{W}pgMar")
@@ -289,7 +290,7 @@ class DocxEngine:
                 if orig_val != mod_val:
                     logger.error(f"Regression: Page margin '{attr}' changed from {orig_val} to {mod_val}")
                     return False
-                    
+
         orig_pgSz = orig_tree.find(f".//{W}pgSz")
         mod_pgSz = mod_tree.find(f".//{W}pgSz")
         if orig_pgSz is not None and mod_pgSz is not None:
@@ -299,42 +300,42 @@ class DocxEngine:
                 if orig_val != mod_val:
                     logger.error(f"Regression: Page size/orientation '{attr}' changed from {orig_val} to {mod_val}")
                     return False
-                    
+
         return True
 
     def _merge_changes_docx_fallback(self, template_path: str, optimized_sections: dict, output_path: str):
         """Traditional python-docx layout replacement fallback."""
         doc = Document(template_path)
-        
+
         for section_name, optimized_content in optimized_sections.items():
             if not optimized_content:
                 continue
-                
+
             heading_idx = -1
             for idx, p in enumerate(doc.paragraphs):
                 if p.text.strip().lower() == section_name.lower():
                     heading_idx = idx
                     break
-                    
+
             if heading_idx == -1:
                 continue
-                
+
             if section_name.lower() == "professional experience":
                 opt_bullets = [
                     b.strip().lstrip("-*• ").strip()
                     for b in optimized_content.split("\n")
                     if b.strip()
                 ]
-                
+
                 bullet_paragraphs = []
                 idx = heading_idx + 1
                 while idx < len(doc.paragraphs):
                     p = doc.paragraphs[idx]
                     p_text = p.text.strip()
-                    
+
                     if p.style.name.startswith("Heading") or (p_text and p_text in ["Skills Summary", "Education", "Certifications"]):
                         break
-                        
+
                     if p.style.name.startswith("List") or p_text.startswith("-") or p_text.startswith("*") or p_text.startswith("•"):
                         bullet_paragraphs.append(p)
                     elif p_text == "":
@@ -343,7 +344,7 @@ class DocxEngine:
                         if bullet_paragraphs:
                             break
                     idx += 1
-                
+
                 for i, opt_text in enumerate(opt_bullets):
                     if i < len(bullet_paragraphs):
                         self._replace_paragraph_text_preserving_style(bullet_paragraphs[i], opt_text)
@@ -357,11 +358,11 @@ class DocxEngine:
                             p = doc.add_paragraph(opt_text, style='List Bullet')
                             p.paragraph_format.left_indent = Inches(0.5)
                             bullet_paragraphs.append(p)
-                            
+
                 if len(bullet_paragraphs) > len(opt_bullets):
                     for excess_p in bullet_paragraphs[len(opt_bullets):]:
                         self._replace_paragraph_text_preserving_style(excess_p, "")
-                        
+
             else:
                 idx = heading_idx + 1
                 target_p = None
@@ -373,10 +374,10 @@ class DocxEngine:
                         target_p = p
                         break
                     idx += 1
-                    
+
                 if target_p:
                     self._replace_paragraph_text_preserving_style(target_p, optimized_content.strip())
-                    
+
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         doc.save(output_path)
 
@@ -407,7 +408,7 @@ class DocxEngine:
         dst.paragraph_format.space_before = src.paragraph_format.space_before
         dst.paragraph_format.space_after = src.paragraph_format.space_after
         dst.paragraph_format.line_spacing = src.paragraph_format.line_spacing
-        
+
         if src.runs and dst.runs:
             dst_run = dst.runs[0]
             src_run = src.runs[0]
@@ -423,29 +424,29 @@ class DocxEngine:
     def _create_default_template(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         doc = Document()
-        
+
         title = doc.add_paragraph()
         run = title.add_run("John Doe")
         run.font.size = Pt(24)
         run.bold = True
-        
+
         contact = doc.add_paragraph("Email: john.doe@example.com | Phone: 123-456-7890 | San Francisco, CA")
         contact.paragraph_format.space_after = Pt(20)
-        
+
         doc.add_heading("Professional Experience", level=1)
         doc.add_paragraph("- Worked as a backend dev at tech co.", style='List Bullet')
         doc.add_paragraph("- Developed database schemas and queries.", style='List Bullet')
         doc.add_paragraph("- Wrote python backend scripts.", style='List Bullet')
-        
+
         doc.add_heading("Skills Summary", level=1)
         doc.add_paragraph("Python, FastAPI, SQL, Docker, HTML, JavaScript")
-        
+
         doc.add_heading("Education", level=1)
         doc.add_paragraph("B.S. in Computer Science - State University (2018 - 2022)")
-        
+
         doc.add_heading("Certifications", level=1)
         doc.add_paragraph("PostgreSQL Certified Professional")
-        
+
         doc.save(path)
         logger.info(f"Created default base resume template at {path}")
 

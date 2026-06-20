@@ -12,7 +12,7 @@ export default function LearningRecommendationsPage() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div>
-        <h2 className="text-2xl font-black text-white">Learning Recommendations</h2>
+        <h1 className="text-2xl font-black text-white">Learning Recommendations</h1>
         <p className="text-xs text-slate-400 mt-1">Recommended courses, reference guides, and documentation paths to resolve identified experience and technical skill gaps.</p>
       </div>
 

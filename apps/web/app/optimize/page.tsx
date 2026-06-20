@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useCISStore, SkillGap } from "../store";
+import { apiFetch, API_BASE } from "../api/apiFetch";
 
 export default function OptimizerWorkspace() {
   const {
@@ -63,7 +64,7 @@ export default function OptimizerWorkspace() {
       let targetJdText = jdText;
       if (jdSource === "select" && selectedJdId) {
         // Fetch raw text for selected JD
-        const res = await fetch(`http://localhost:8000/api/jd/${selectedJdId}`);
+        const res = await apiFetch(`${API_BASE}/jd/${selectedJdId}`);
         if (res.ok) {
           const jdData = await res.json();
           targetJdText = jdData.extracted_skills.join(", ") + " - target job requirements";
@@ -124,9 +125,9 @@ export default function OptimizerWorkspace() {
   const handleDownload = async (id: string, isCoverLetter: boolean, format: "docx" | "pdf") => {
     try {
       const endpoint = isCoverLetter
-        ? `http://localhost:8000/api/cover-letter/${id}/download?format=${format}`
-        : `http://localhost:8000/api/resume/${id}/download?format=${format}`;
-      const res = await window.fetch(endpoint);
+        ? `${API_BASE}/cover-letter/${id}/download?format=${format}`
+        : `${API_BASE}/resume/${id}/download?format=${format}`;
+      const res = await apiFetch(endpoint);
       if (!res.ok) {
         alert(`Download failed: ${res.statusText}`);
         return;
@@ -175,7 +176,7 @@ export default function OptimizerWorkspace() {
       // If cover letter is active, save it in the database vault
       if (editableCLText && jdAnalysis) {
         const { saveCoverLetter } = useCISStore.getState();
-        const saveRes = await fetch("http://localhost:8000/api/cover-letter/save", {
+        const saveRes = await apiFetch(`${API_BASE}/cover-letter/save`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -194,7 +195,7 @@ export default function OptimizerWorkspace() {
       // Direct manual overrides on generated CV
       if (editableCVText !== optimizedResume.generated_text) {
         // Save manual overrides by updating file path/text in backend
-        await fetch(`http://localhost:8000/api/resume/versions/${optimizedResume.resume_id}/rename`, {
+        await apiFetch(`${API_BASE}/resume/versions/${optimizedResume.resume_id}/rename`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -231,9 +232,9 @@ export default function OptimizerWorkspace() {
     <div className="space-y-8 max-w-7xl mx-auto p-4 md:p-6">
       {/* Page Title */}
       <div>
-        <h2 className="text-3xl font-black text-white flex items-center gap-3">
+        <h1 className="text-3xl font-black text-white flex items-center gap-3">
           <span>⚙️</span> CV Optimizer Workspace
-        </h2>
+        </h1>
         <p className="text-slate-400 text-xs mt-1">End-to-end interactive matching, skill mapping, ATS optimization, and multi-format document generation.</p>
       </div>
 
@@ -341,6 +342,8 @@ export default function OptimizerWorkspace() {
 
           {jdSource === "paste" ? (
             <textarea
+              id="jd-text-paste"
+              aria-label="Paste raw text of the target job description"
               value={jdText}
               onChange={(e) => setJdText(e.target.value)}
               placeholder="Paste raw text of the target job description here..."
@@ -601,6 +604,8 @@ export default function OptimizerWorkspace() {
                 <p className="text-[10px] text-slate-500">Edit the generated CV text directly before locking variants.</p>
                 
                 <textarea
+                  id="cv-manual-override-textarea"
+                  aria-label="Edit the generated CV text directly"
                   value={editableCVText}
                   onChange={(e) => setEditableCVText(e.target.value)}
                   rows={8}
@@ -624,6 +629,8 @@ export default function OptimizerWorkspace() {
 
                 {editingCoverLetter && (
                   <textarea
+                    id="cover-letter-edit-textarea"
+                    aria-label="Edit generated cover letter text content"
                     value={editableCLText}
                     onChange={(e) => setEditableCLText(e.target.value)}
                     rows={8}

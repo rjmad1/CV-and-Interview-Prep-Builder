@@ -1,6 +1,8 @@
 import asyncio
 import logging
+
 from celery import Celery
+
 from apps.api.src.config import settings
 
 logger = logging.getLogger("cis-celery-tasks")
@@ -25,7 +27,7 @@ def process_document_task(document_id: str, user_id: str, file_path: str):
     """Celery background task to trigger the LangGraph document processing flow."""
     logger.info(f"Triggering background ingestion for document {document_id} and user {user_id}")
     from apps.api.src.graph.document_processing import document_processing_graph
-    
+
     # Run the async LangGraph workflow synchronously inside the worker process
     async def run_flow():
         initial_state = {

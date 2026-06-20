@@ -2,7 +2,7 @@
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -39,7 +39,7 @@ class InterviewCreateRequest(BaseModel):
 class OutcomeCreateRequest(BaseModel):
     outcome_type: str  # offer | rejection | withdraw
     feedback: str | None = None
-    details: Dict[str, Any] = {}
+    details: dict[str, Any] = {}
 
 
 class ApplicationResponse(BaseModel):
@@ -64,7 +64,7 @@ class InterviewScheduleResponse(BaseModel):
 
 # --- Routes ---
 
-@router.get("", response_model=List[ApplicationResponse])
+@router.get("", response_model=list[ApplicationResponse])
 async def list_applications(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -168,7 +168,7 @@ async def delete_application(
     return {"status": "success", "message": "Application deleted successfully."}
 
 
-@router.get("/{app_id}/interviews", response_model=List[InterviewScheduleResponse])
+@router.get("/{app_id}/interviews", response_model=list[InterviewScheduleResponse])
 async def list_interviews(
     app_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),

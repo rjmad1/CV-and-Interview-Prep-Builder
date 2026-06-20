@@ -1,8 +1,9 @@
 import logging
 import uuid
-from typing import Dict, List, Any, TypedDict
-from langgraph.graph import StateGraph, END
-from apps.api.src.config import settings
+from typing import Any, TypedDict
+
+from langgraph.graph import END, StateGraph
+
 from apps.api.src.database import SessionLocal
 from apps.api.src.engine.jd_analyzer import JDAnalyzer
 
@@ -13,16 +14,16 @@ class JDState(TypedDict):
     jd_raw_text: str
     company: str
     title: str
-    extracted_skills: List[str]
-    required_keywords: List[str]
-    experience_gaps: List[Dict[str, Any]]
+    extracted_skills: list[str]
+    required_keywords: list[str]
+    experience_gaps: list[dict[str, Any]]
     score: float
     status: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 # --- Node Implementations ---
 
-async def extract_requirements(state: JDState) -> Dict[str, Any]:
+async def extract_requirements(state: JDState) -> dict[str, Any]:
     """Extracts required skills and keywords from raw job description text via JDAnalyzer."""
     logger.info("Extracting requirements from job description...")
     db = SessionLocal()
@@ -39,7 +40,7 @@ async def extract_requirements(state: JDState) -> Dict[str, Any]:
     finally:
         db.close()
 
-def normalize_skills(state: JDState) -> Dict[str, Any]:
+def normalize_skills(state: JDState) -> dict[str, Any]:
     """Normalizes extracted skills against standardized taxonomy values using JDAnalyzer."""
     logger.info("Normalizing extracted skills...")
     db = SessionLocal()
@@ -53,7 +54,7 @@ def normalize_skills(state: JDState) -> Dict[str, Any]:
     finally:
         db.close()
 
-def calculate_gaps_and_score(state: JDState) -> Dict[str, Any]:
+def calculate_gaps_and_score(state: JDState) -> dict[str, Any]:
     """Performs gap analysis matching user skills and computes compatibility score using JDAnalyzer."""
     logger.info("Calculating skill gap metrics...")
     db = SessionLocal()
@@ -72,12 +73,12 @@ def calculate_gaps_and_score(state: JDState) -> Dict[str, Any]:
     finally:
         db.close()
 
-def persist_analysis(state: JDState) -> Dict[str, Any]:
+def persist_analysis(state: JDState) -> dict[str, Any]:
     """Persists job descriptions and analysis results to database using JDAnalyzer."""
     logger.info("Persisting JD and gap analysis details to DB...")
     user_id = state["user_id"]
     jd_id = state["metadata"].get("jd_id", str(uuid.uuid4()))
-    
+
     db = SessionLocal()
     try:
         analyzer = JDAnalyzer(db)
@@ -93,7 +94,7 @@ def persist_analysis(state: JDState) -> Dict[str, Any]:
         )
     finally:
         db.close()
-        
+
     return {
         "metadata": {**state["metadata"], "jd_id": jd_id},
         "status": "completed"

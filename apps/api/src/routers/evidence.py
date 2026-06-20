@@ -1,9 +1,9 @@
 """Evidence validation and hallucination audit router."""
 import logging
 import uuid
-from typing import Any, List
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +29,7 @@ class HallucinationEventResponse(BaseModel):
 
 class VerifyClaimRequest(BaseModel):
     text_snippet: str
-    selected_evidence_ids: List[uuid.UUID]
+    selected_evidence_ids: list[uuid.UUID]
 
 
 class VerifyClaimResponse(BaseModel):
@@ -44,7 +44,7 @@ class OverrideClaimRequest(BaseModel):
     audit_comments: str
 
 
-@router.get("/hallucinations", response_model=List[HallucinationEventResponse])
+@router.get("/hallucinations", response_model=list[HallucinationEventResponse])
 async def list_hallucinations(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),

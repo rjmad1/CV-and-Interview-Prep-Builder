@@ -1,7 +1,7 @@
 """Routers package — exports all domain APIRouter instances."""
 from apps.api.src.routers import (
-    applications,
     app_settings,
+    applications,
     ats,
     cover_letter,
     documents,

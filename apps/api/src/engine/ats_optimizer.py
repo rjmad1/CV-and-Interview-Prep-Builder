@@ -1,11 +1,19 @@
 import logging
 import uuid
-from typing import Dict, List, Any
+from typing import Any
+
 from sqlalchemy.orm import Session
+
 from apps.api.src.config import settings
-from apps.api.src.models import ResumeVersion, JobDescription, SkillRequirement, DocumentChunk, EvidenceBundle, TraceRecord
-from apps.api.src.utils.ai_client import ai_gateway_client
 from apps.api.src.engine.ats_scorer import ATSScorer
+from apps.api.src.models import (
+    DocumentChunk,
+    JobDescription,
+    ResumeVersion,
+    SkillRequirement,
+    TraceRecord,
+)
+from apps.api.src.utils.ai_client import ai_gateway_client
 
 logger = logging.getLogger("cis-ats-optimizer")
 
@@ -20,7 +28,7 @@ class ATSOptimizer:
         resume_version_id: uuid.UUID,
         jd_id: uuid.UUID,
         user_id: uuid.UUID
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Iterative keyword-weaving optimization loop:
         1. Compares resume against JD skill requirements to identify missing keywords.
@@ -33,7 +41,7 @@ class ATSOptimizer:
         # 1. Fetch resume and JD records
         rv = self.db.query(ResumeVersion).filter(ResumeVersion.id == resume_version_id).first()
         jd = self.db.query(JobDescription).filter(JobDescription.id == jd_id).first()
-        
+
         if not rv or not jd:
             raise ValueError("Resume version or Job Description not found.")
 
@@ -45,7 +53,7 @@ class ATSOptimizer:
         initial_report = await self.scorer.compute_score(rv.generated_text, jd.raw_text, keywords)
         initial_score = initial_report["ats_score"]
         missing_kws = initial_report["detailed_findings"]["missing_keywords"]
-        
+
         if not missing_kws:
             logger.info("No missing keywords identified. Resume is already fully optimized.")
             return {
@@ -64,7 +72,7 @@ class ATSOptimizer:
             traces = self.db.query(TraceRecord).filter(TraceRecord.bundle_id == rv.evidence_bundle_id).all()
             chunk_ids = [t.chunk_id for t in traces]
             chunks = self.db.query(DocumentChunk).filter(DocumentChunk.id.in_(chunk_ids)).all()
-            
+
         if not chunks:
             # Fallback to general user documents
             chunks = self.db.query(DocumentChunk).filter(DocumentChunk.user_id == user_id).limit(10).all()
@@ -107,11 +115,11 @@ class ATSOptimizer:
         new_report = await self.scorer.compute_score(optimized_text, jd.raw_text, keywords)
         new_score = new_report["ats_score"]
         new_missing = new_report["detailed_findings"]["missing_keywords"]
-        
+
         weaved = [kw for kw in missing_kws if kw not in new_missing]
-        
+
         logger.info(f"ATS optimization completed. Score improved from {initial_score} to {new_score}")
-        
+
         return {
             "success": True,
             "optimized_text": optimized_text,
