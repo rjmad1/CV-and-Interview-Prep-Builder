@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from apps.api.src.main import app
 from apps.api.src.database import get_db, Base, SessionLocal, engine
 from apps.api.src.models import (
-    User, Document, JobDescription, ResumeTemplate, ResumeVersion
+    User, Document, JobDescription, ResumeTemplate, ResumeVersion, GapAnalysis
 )
 from sqlalchemy import select
 from apps.api.src.utils.pdf_generator import convert_docx_to_pdf, generate_cover_letter_pdf
@@ -153,3 +153,34 @@ def test_pdf_rendering_fidelity():
         generate_cover_letter_pdf("Dear Hiring Manager,\n\nI am writing to express my interest...\n\nSincerely,\nJohn", cl_pdf_path)
         assert os.path.exists(cl_pdf_path)
         assert os.path.getsize(cl_pdf_path) > 0
+
+
+def test_get_learning_recommendations(client):
+    db = SessionLocal()
+    jd = db.query(JobDescription).filter(JobDescription.is_archived == False).first()
+    assert jd is not None
+    user = db.query(User).first()
+    
+    # Seed a mock gap
+    gap = GapAnalysis(
+        id=uuid.uuid4(),
+        jd_id=jd.id,
+        user_id=user.id,
+        skill_name="Kubernetes",
+        importance="high",
+        match_status="missing"
+    )
+    db.add(gap)
+    db.commit()
+    db.close()
+
+    # Verify API response
+    response = client.get(f"/api/jd/{jd.id}/learning")
+    assert response.status_code == 200
+    data = response.json()
+    assert "recommendations" in data
+    assert len(data["recommendations"]) == 3
+    rec = data["recommendations"][0]
+    assert "title" in rec
+    assert "target" in rec
+

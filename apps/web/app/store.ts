@@ -16,6 +16,7 @@ import type {
   InterviewSession,
   CoverLetterVersionItem,
   PrepCards,
+  LearningRecommendation,
 } from "./types";
 
 // Re-export types so existing consumers don't break
@@ -48,6 +49,7 @@ interface CISState {
   jdsList: JDListItem[];
   resumeVersionsList: ResumeVersionListItem[];
   coverLettersList: CoverLetterVersionItem[];
+  learningRecommendations: LearningRecommendation[];
   loading: boolean;
   error: string | null;
 
@@ -55,6 +57,7 @@ interface CISState {
   fetchDocuments: () => Promise<void>;
   uploadDocument: (file: File) => Promise<void>;
   uploadDocumentWithType: (file: File, documentType: string) => Promise<void>;
+  fetchLearningRecommendations: (jdId: string) => Promise<void>;
   analyzeJD: (jdText: string) => Promise<void>;
   optimizeResume: (templateId: string, jdId: string, evidenceIds: string[]) => Promise<void>;
   optimizeResumeATS: (resumeVersionId: string, jdId: string) => Promise<any>;
@@ -110,8 +113,22 @@ export const useCISStore = create<CISState>((set, get) => ({
   prepCards: null,
   jdsList: [],
   resumeVersionsList: [],
+  coverLettersList: [],
+  learningRecommendations: [],
   loading: false,
   error: null,
+
+  fetchLearningRecommendations: async (jdId: string) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await apiFetch(`${API_URL}/jd/${jdId}/learning`);
+      if (!res.ok) throw new Error("Failed to fetch learning recommendations");
+      const data = await res.json();
+      set({ learningRecommendations: data.recommendations, loading: false });
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
 
   fetchEvidenceChunks: async (jdId: string) => {
     set({ loading: true, error: null });
@@ -538,8 +555,6 @@ export const useCISStore = create<CISState>((set, get) => ({
     }
   },
 
-  coverLettersList: [],
-
   uploadDocumentWithType: async (file: File, documentType: string) => {
     set({ loading: true, error: null });
     try {
@@ -719,6 +734,7 @@ export const useCISStore = create<CISState>((set, get) => ({
         jdsList: [],
         resumeVersionsList: [],
         coverLettersList: [],
+        learningRecommendations: [],
         loading: false,
       });
       await get().fetchDocuments();

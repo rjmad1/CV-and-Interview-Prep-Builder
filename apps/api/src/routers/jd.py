@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.api.src.config import settings
 from apps.api.src.database import get_db
 from apps.api.src.graph.evidence_retrieval import evidence_retrieval_graph
 from apps.api.src.graph.jd_intelligence import jd_intelligence_graph
@@ -18,6 +19,7 @@ from apps.api.src.models import (
     User,
 )
 from apps.api.src.routers.deps import get_current_user
+from apps.api.src.utils.ai_client import ai_gateway_client
 
 logger = logging.getLogger("cis-api")
 router = APIRouter(prefix="/api", tags=["Job Descriptions & Evidence"])
@@ -52,6 +54,18 @@ class EvidenceItem(BaseModel):
     chunk_id: uuid.UUID
     confidence: float
     text_snippet: str
+
+
+class LearningRecommendation(BaseModel):
+    title: str
+    provider: str
+    duration: str
+    target: str
+    link: str
+
+
+class LearningRecommendationsResponse(BaseModel):
+    recommendations: list[LearningRecommendation]
 
 
 @router.post("/jd/analyze", response_model=JDAnalysisResponse)
@@ -213,3 +227,107 @@ async def retrieve_evidence(
             logger.error(f"Error parsing evidence item: {exc}")
 
     return evidence_items
+
+
+@router.get("/jd/{jd_id}/learning", response_model=LearningRecommendationsResponse)
+async def get_learning_recommendations(
+    jd_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Generates dynamic AI learning recommendations based on identified skill gaps."""
+    import json
+
+    result_jd = await db.execute(
+        select(JobDescription).filter(JobDescription.id == jd_id, JobDescription.user_id == user.id)
+    )
+    jd = result_jd.scalars().first()
+    if not jd:
+        raise HTTPException(status_code=404, detail="Job description not found.")
+
+    result_gaps = await db.execute(
+        select(GapAnalysis).filter(GapAnalysis.jd_id == jd_id, GapAnalysis.user_id == user.id)
+    )
+    gaps = result_gaps.scalars().all()
+
+    missing_skills = [g.skill_name for g in gaps if g.match_status in ("missing", "underrepresented")]
+    if not missing_skills:
+        missing_skills = [g.skill_name for g in gaps]
+
+    if not missing_skills:
+        # Fallback default recommendations if no gaps are loaded yet
+        return LearningRecommendationsResponse(recommendations=[
+            LearningRecommendation(
+                title="Advanced FastAPI Masterclass",
+                provider="FastAPI Core / Udemy",
+                duration="8 hours",
+                target="Bridges Python Backend Gap",
+                link="#",
+            ),
+            LearningRecommendation(
+                title="PostgreSQL Query Optimization & RLS",
+                provider="Postgres Institute / Coursera",
+                duration="12 hours",
+                target="Bridges Database Security Gap",
+                link="#",
+            ),
+            LearningRecommendation(
+                title="NVIDIA NIM Integration & LLM Guardrails",
+                provider="NVIDIA Deep Learning Institute",
+                duration="6 hours",
+                target="Bridges AI Gateway Integration Gap",
+                link="#",
+            )
+        ])
+
+    system_prompt = (
+        "You are an expert technical career development coach. "
+        "Based on the provided list of technical skill gaps and the target job title, "
+        "generate exactly 3 highly relevant and specific learning recommendations (courses, books, or documentation paths) "
+        "to help the candidate bridge these specific gaps.\n"
+        "Output a valid JSON object matching this schema:\n"
+        '{"recommendations": [{"title": "Course Title", "provider": "Provider Name", "duration": "X hours", "target": "Bridges [Skill] Gap", "link": "#"}]}'
+    )
+
+    user_prompt = (
+        f"Target Job Position: {jd.title} at {jd.company}\n"
+        f"Identified Skill Gaps:\n" + "\n".join(f"- {s}" for s in missing_skills)
+    )
+
+    try:
+        raw = await ai_gateway_client.generate(
+            model=settings.MODEL_INTERVIEW_COACH,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3
+        )
+        clean = raw.replace("```json", "").replace("```", "").strip()
+        data = json.loads(clean)
+        return LearningRecommendationsResponse(**data)
+    except Exception as exc:
+        logger.error(f"Failed to generate dynamic learning recommendations: {exc}")
+        # Structured fallback recommendations
+        recommendations = []
+        for gap in missing_skills[:3]:
+            recommendations.append(
+                LearningRecommendation(
+                    title=f"{gap} Essentials & Production Best Practices",
+                    provider="Enterprise Learning Hub",
+                    duration="10 hours",
+                    target=f"Bridges {gap} Gap",
+                    link="#",
+                )
+            )
+        while len(recommendations) < 3:
+            recommendations.append(
+                LearningRecommendation(
+                    title="System Design & Architecture Upgrades",
+                    provider="O'Reilly Media",
+                    duration="15 hours",
+                    target="Bridges System Design Gap",
+                    link="#",
+                )
+            )
+        return LearningRecommendationsResponse(recommendations=recommendations)

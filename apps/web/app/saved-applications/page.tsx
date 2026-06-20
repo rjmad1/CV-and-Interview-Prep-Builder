@@ -40,7 +40,7 @@ export default function SavedApplicationsPage() {
               <div className="flex justify-between items-center pt-4 border-t border-slate-900/50 mt-4 text-[10px]">
                 <span className="text-slate-500">Saved: {job.date}</span>
                 <div className="flex gap-2">
-                  <a href="/jd-analysis" className="px-3 py-1 bg-purple-950 text-purple-400 border border-purple-900 rounded hover:bg-purple-900 hover:text-white transition-all">
+                  <a href="/optimize" className="px-3 py-1 bg-purple-950 text-purple-400 border border-purple-900 rounded hover:bg-purple-900 hover:text-white transition-all">
                     Analyze JD
                   </a>
                   <a href={job.link} className="px-3 py-1 bg-slate-900 text-slate-350 border border-slate-800 rounded hover:bg-slate-800 hover:text-white transition-all">

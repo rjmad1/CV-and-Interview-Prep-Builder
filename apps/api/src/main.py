@@ -39,8 +39,8 @@ async def lifespan(app: FastAPI):
     """Manage startup and shutdown: create DB tables, close httpx client."""
     # Create DB tables on startup
     from apps.api.src import models  # noqa: F401 — registers all models with Base
-    from apps.api.src.database import Base, engine
-    async with engine.begin() as conn:
+    from apps.api.src.database import Base, async_engine
+    async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables verified/created.")
 

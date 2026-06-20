@@ -158,3 +158,15 @@ export interface PrepCards {
   technical_flashcards: TechnicalFlashcard[];
   behavioral_tips: string[];
 }
+
+export interface LearningRecommendation {
+  title: string;
+  provider: string;
+  duration: string;
+  target: string;
+  link: string;
+}
+
+export interface LearningRecommendationsResponse {
+  recommendations: LearningRecommendation[];
+}
